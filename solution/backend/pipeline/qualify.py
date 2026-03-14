@@ -2,10 +2,9 @@
 Main pipeline orchestrator.
 
 Runs the full qualification pipeline:
-  Filter 0: Intent extraction (Claude haiku)
-  Filter 1: Structured pandas filter
-  Filter 2: Embedding similarity (sentence-transformers)
-  Filter 3: LLM batch reranker (Claude haiku)
+  Filter 0: Intent extraction (Llama-3.1-8B via featherless.ai)
+  Filter 1: Structured pandas filter (employee count, country, revenue, etc.)
+  Filter 2: LangChain RAG — FAISS retrieval + Qwen2.5-72B scoring
 
 Returns a ranked list of matching companies.
 """
@@ -14,9 +13,8 @@ import pandas as pd
 
 from pipeline.intent_extractor import extract_intent
 from pipeline.structured_filter import apply_structured_filter
-from pipeline.embedding_filter import embed_and_rank
-from pipeline.llm_reranker import llm_rerank
-from config import EMBEDDING_TOP_K, FINAL_TOP_N, DATA_PATH
+from pipeline.rag_filter import rag_rank
+from config import FINAL_TOP_N, DATA_PATH
 
 
 # Load dataset once at module level
@@ -61,19 +59,19 @@ def qualify(query: str, top_n: int = FINAL_TOP_N) -> dict:
     Returns:
         {
             "query": str,
-            "intent": dict,           # extracted structured intent
-            "total_candidates": int,  # companies in dataset
-            "after_filter1": int,     # after structured filter
-            "after_filter2": int,     # after embedding filter
-            "results": [              # final ranked companies
+            "intent": dict,             # extracted structured intent
+            "total_candidates": int,    # companies in dataset
+            "after_filter1": int,       # after structured filter
+            "after_filter2": int,       # companies sent to Perplexity
+            "results": [                # final ranked companies
                 {
                     "rank": int,
                     "operational_name": str,
                     "website": str,
                     "address": dict,
-                    "embedding_score": float,
-                    "llm_score": int,
+                    "rag_score": int,
                     "match_reasons": str,
+                    "final_score": float,
                     ...
                 }
             ]
@@ -90,24 +88,15 @@ def qualify(query: str, top_n: int = FINAL_TOP_N) -> dict:
     after_f1 = len(filtered)
     print(f"[Filter 1] {len(df)} -> {after_f1} companies after structured filter")
 
-    # ── Filter 2: embedding similarity ────────────────────────────────────
-    semantic_query = intent.get("semantic_query") or query
-    top_k = min(EMBEDDING_TOP_K, after_f1)
-    embedded = embed_and_rank(filtered, semantic_query, top_k=top_k)
-    after_f2 = len(embedded)
-    print(f"[Filter 2] {after_f1} -> {after_f2} companies after embedding filter")
+    # ── Filter 2: LangChain RAG (FAISS retrieval + Qwen2.5-72B scoring) ────
+    print(f"[Filter 2] Running RAG pipeline on {after_f1} companies…")
+    reranked = rag_rank(filtered, intent)
+    after_f2 = len(reranked)
+    print(f"[Filter 2] RAG pipeline complete — {after_f2} companies scored")
 
-    # ── Filter 3: LLM batch reranker ──────────────────────────────────────
-    reranked = llm_rerank(embedded, intent)
-    print(f"[Filter 3] Scored {after_f2} companies with LLM")
-
-    # ── Final ranking: combine scores ─────────────────────────────────────
-    # Normalize embedding score to [0, 1] then weight: 40% embedding + 60% LLM
-    max_llm = reranked["llm_score"].max() or 1
-    reranked["final_score"] = (
-        0.4 * reranked["embedding_score"]
-        + 0.6 * (reranked["llm_score"] / max_llm)
-    )
+    # ── Final ranking: normalize RAG score to [0, 1] ──────────────────────
+    max_score = reranked["rag_score"].max() or 1
+    reranked["final_score"] = reranked["rag_score"] / max_score
     reranked = reranked.sort_values("final_score", ascending=False)
 
     # Respect result_count from intent if specified
@@ -120,7 +109,7 @@ def qualify(query: str, top_n: int = FINAL_TOP_N) -> dict:
         "employee_count", "revenue", "is_public",
         "primary_naics", "description", "business_model",
         "core_offerings", "target_markets",
-        "embedding_score", "llm_score", "match_reasons", "final_score",
+        "rag_score", "match_reasons", "final_score",
     ]
     output_cols = [c for c in output_cols if c in reranked.columns]
 

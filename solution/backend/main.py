@@ -39,12 +39,11 @@ class QueryRequest(BaseModel):
 
 @app.on_event("startup")
 async def startup():
-    """Pre-load data and embedding model on startup."""
+    """Pre-load data and warm up the embedding model on startup."""
     _load_data()
-    # Warm up embedding model
-    from pipeline.embedding_filter import _get_model
-    _get_model()
-    print("Startup complete — data and model loaded.")
+    from pipeline.rag_filter import _get_embeddings
+    _get_embeddings()
+    print("Startup complete — data and embedding model loaded.")
 
 
 @app.get("/health")
