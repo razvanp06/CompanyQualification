@@ -127,10 +127,14 @@ def qualify(query: str, top_n: int = FINAL_TOP_N) -> dict:
     import math
 
     def _clean(val):
-        """Convert numpy scalars and NaN to JSON-safe Python types."""
-        if hasattr(val, "item"):
+        """Recursively convert numpy scalars, NaN, and Inf to JSON-safe Python types."""
+        if isinstance(val, dict):
+            return {k: _clean(v) for k, v in val.items()}
+        if isinstance(val, list):
+            return [_clean(v) for v in val]
+        if hasattr(val, "item"):        # numpy scalar
             val = val.item()
-        if isinstance(val, float) and math.isnan(val):
+        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
             return None
         return val
 

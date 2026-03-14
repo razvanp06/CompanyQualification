@@ -12,8 +12,8 @@ FEATHERLESS_BASE_URL = "https://api.featherless.ai/v1"
 # Models on featherless.ai (HuggingFace model IDs)
 # Fast 8B model for intent extraction — cheap and quick
 LLM_INTENT_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-# Larger 70B model for reranking — better reasoning on company profiles
-LLM_RERANK_MODEL = "meta-llama/Meta-Llama-3.3-70B-Instruct"
+# Reranking model — use same 8B model if 70B is not available on your plan
+LLM_RERANK_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 # Pipeline settings
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"   # local, free, fast

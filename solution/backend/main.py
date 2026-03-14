@@ -9,10 +9,13 @@ Endpoints:
 
 import sys
 import os
+import math
+import json
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from pipeline.qualify import qualify, _load_data
@@ -58,9 +61,22 @@ def qualify_endpoint(req: QueryRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty")
     try:
         result = qualify(req.query, top_n=req.top_n)
-        return result
+        return JSONResponse(content=_nan_safe(result))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _nan_safe(obj):
+    """Recursively replace NaN/Inf with None for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: _nan_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_nan_safe(v) for v in obj]
+    if hasattr(obj, "item"):
+        obj = obj.item()
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
 
 
 @app.get("/companies")
@@ -68,9 +84,10 @@ def list_companies(limit: int = 50, offset: int = 0):
     """Return raw companies for browsing / debugging."""
     df = _load_data()
     slice_ = df.iloc[offset: offset + limit]
-    return {
+    data = _nan_safe({
         "total": len(df),
         "offset": offset,
         "limit": limit,
         "companies": slice_.to_dict(orient="records"),
-    }
+    })
+    return JSONResponse(content=data)
