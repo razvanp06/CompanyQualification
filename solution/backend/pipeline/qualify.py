@@ -94,9 +94,14 @@ def qualify(query: str, top_n: int = FINAL_TOP_N) -> dict:
     after_f2 = len(reranked)
     print(f"[Filter 2] RAG pipeline complete — {after_f2} companies scored")
 
-    # ── Final ranking: normalize RAG score to [0, 1] ──────────────────────
-    max_score = reranked["rag_score"].max() or 1
-    reranked["final_score"] = reranked["rag_score"] / max_score
+    # ── Final ranking: 40% semantic similarity + 60% LLM criteria score ──────
+    # This prevents the binary 100/0 problem: even when rag_score clusters
+    # companies into a few tiers, embedding_score creates a smooth gradient.
+    max_rag = reranked["rag_score"].max() or 1
+    reranked["final_score"] = (
+        0.4 * reranked["embedding_score"]
+        + 0.6 * (reranked["rag_score"] / max_rag)
+    )
     reranked = reranked.sort_values("final_score", ascending=False)
 
     # Respect result_count from intent if specified
@@ -109,7 +114,7 @@ def qualify(query: str, top_n: int = FINAL_TOP_N) -> dict:
         "employee_count", "revenue", "is_public",
         "primary_naics", "description", "business_model",
         "core_offerings", "target_markets",
-        "rag_score", "match_reasons", "final_score",
+        "embedding_score", "rag_score", "match_reasons", "final_score",
     ]
     output_cols = [c for c in output_cols if c in reranked.columns]
 

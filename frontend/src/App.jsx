@@ -49,6 +49,11 @@ function adaptCompany(c) {
       label: `AI: ${c.rag_score} criteria matched`,
       pts: c.rag_score * 10,
     });
+  if (c.embedding_score > 0.5)
+    signals.push({
+      label: "Strong semantic match",
+      pts: Math.round(c.embedding_score * 10),
+    });
   if (c.match_reasons) signals.push({ label: c.match_reasons, pts: 0 });
 
   return { ...c, address: addrStr, score, qualified, signals };

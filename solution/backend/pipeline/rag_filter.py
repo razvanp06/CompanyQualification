@@ -164,19 +164,29 @@ def _score_batch(
 
 def rag_rank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     """
-    Two-step RAG pipeline replacing the old embedding filter + LLM reranker:
+    Two-step RAG pipeline:
 
-    1. FAISS retrieval — finds the RAG_TOP_K most semantically relevant
-       companies from the filtered set using the semantic_query.
-    2. Qwen2.5-72B scoring — evaluates each retrieved company against the
-       extracted criteria in batches of LLM_BATCH_SIZE.
+    1. FAISS retrieval — retrieves top RAG_TOP_K companies by cosine similarity
+       and stores the continuous similarity score as 'embedding_score' [0, 1].
+    2. Qwen2.5-72B scoring — evaluates each company against criteria, producing
+       an integer 'rag_score' (criteria matched count).
 
-    Adds 'rag_score' and 'match_reasons' columns.
-    Returns df sorted by rag_score descending.
+    Final score in qualify.py combines both:
+        final_score = 0.4 * embedding_score + 0.6 * (rag_score / max_rag)
+
+    This guarantees a smooth gradient — companies never all land at 100% or 0%.
     """
     semantic_query = intent.get("semantic_query") or intent.get("original_query", "")
     query = intent.get("original_query") or semantic_query
     criteria = intent.get("criteria", [])
+
+    # Guard: nothing to rank
+    if df.empty:
+        df = df.copy()
+        df["embedding_score"] = 0.0
+        df["rag_score"] = 0
+        df["match_reasons"] = ""
+        return df
 
     # ── Step A: LangChain FAISS retrieval ─────────────────────────────────────
     print(f"[RAG Filter] Building FAISS index for {len(df)} companies…")
@@ -192,18 +202,29 @@ def rag_rank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     vector_store = FAISS.from_documents(docs, embeddings)
 
     top_k = min(RAG_TOP_K, len(df))
-    retrieved_docs = vector_store.similarity_search(semantic_query, k=top_k)
-    retrieved_indices = [doc.metadata["df_index"] for doc in retrieved_docs]
 
-    candidates = df.loc[retrieved_indices]
+    # similarity_search_with_score returns (Document, L2_distance)
+    # For L2-normalized vectors: cosine_similarity = 1 - L2² / 2  → clipped to [0, 1]
+    retrieved = vector_store.similarity_search_with_score(semantic_query, k=top_k)
+
+    retrieved_indices = []
+    embedding_scores: dict[int, float] = {}
+    for doc, l2_dist in retrieved:
+        idx = doc.metadata["df_index"]
+        retrieved_indices.append(idx)
+        cosine_sim = max(0.0, 1.0 - (float(l2_dist) ** 2) / 2.0)
+        embedding_scores[idx] = cosine_sim
+
+    candidates = df.loc[retrieved_indices].copy()
+    candidates["embedding_score"] = candidates.index.map(embedding_scores)
     print(f"[RAG Filter] Retrieved {len(candidates)} candidates via FAISS")
 
     # ── Step B: Qwen2.5-72B scoring ───────────────────────────────────────────
+    # When no criteria, skip LLM — embedding_score alone drives the ranking
     if not criteria:
-        result = candidates.copy()
-        result["rag_score"] = 0
-        result["match_reasons"] = ""
-        return result
+        candidates["rag_score"] = 0
+        candidates["match_reasons"] = ""
+        return candidates
 
     llm = ChatOpenAI(
         model=LLM_RERANK_MODEL,
@@ -229,8 +250,11 @@ def rag_rank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
             else:
                 all_results[orig_idx] = {"total": 0, "reason": ""}
 
-    result = candidates.copy()
-    result["rag_score"] = result.index.map(lambda i: all_results.get(i, {}).get("total", 0))
-    result["match_reasons"] = result.index.map(lambda i: all_results.get(i, {}).get("reason", ""))
+    candidates["rag_score"] = candidates.index.map(
+        lambda i: all_results.get(i, {}).get("total", 0)
+    )
+    candidates["match_reasons"] = candidates.index.map(
+        lambda i: all_results.get(i, {}).get("reason", "")
+    )
 
-    return result.sort_values("rag_score", ascending=False)
+    return candidates
