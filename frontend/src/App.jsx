@@ -6,7 +6,11 @@ const API_BASE = "http://localhost:8000";
 // Convert API intent object → format expected by ParsedPanel
 function adaptIntent(intent) {
   const criteria = intent.criteria || [];
-  const q = (intent.semantic_query || intent.original_query || "").toLowerCase();
+  const q = (
+    intent.semantic_query ||
+    intent.original_query ||
+    ""
+  ).toLowerCase();
   return {
     countries: intent.countries || [],
     regionMatch: null,
@@ -17,7 +21,9 @@ function adaptIntent(intent) {
     yearMin: intent.min_year_founded || null,
     isPublic: intent.is_public ?? null,
     businessModels: intent.business_models || [],
-    isSupplyChain: criteria.some((c) => /supply|component|packaging|material/i.test(c)),
+    isSupplyChain: criteria.some((c) =>
+      /supply|component|packaging|material/i.test(c),
+    ),
     isEcosystem: criteria.some((c) => /compet|alternat|similar/i.test(c)),
     isStartup: criteria.some((c) => /startup|start.?up/i.test(c)),
     isFastGrowing: criteria.some((c) => /fast.?grow|rapid/i.test(c)),
@@ -38,11 +44,16 @@ function adaptCompany(c) {
 
   const signals = [];
   if (c.llm_score > 0)
-    signals.push({ label: `AI: ${c.llm_score} criteria matched`, pts: c.llm_score * 10 });
+    signals.push({
+      label: `AI: ${c.llm_score} criteria matched`,
+      pts: c.llm_score * 10,
+    });
   if (c.embedding_score > 0.5)
-    signals.push({ label: "Strong semantic match", pts: Math.round(c.embedding_score * 10) });
-  if (c.match_reasons)
-    signals.push({ label: c.match_reasons, pts: 0 });
+    signals.push({
+      label: "Strong semantic match",
+      pts: Math.round(c.embedding_score * 10),
+    });
+  if (c.match_reasons) signals.push({ label: c.match_reasons, pts: 0 });
 
   return { ...c, address: addrStr, score, qualified, signals };
 }
