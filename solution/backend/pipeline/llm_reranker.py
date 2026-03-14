@@ -138,9 +138,12 @@ def llm_rerank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
 
     rows = list(df.iterrows())  # list of (index, Series)
     all_results: dict[int, dict] = {}
+    total_batches = (len(rows) + LLM_BATCH_SIZE - 1) // LLM_BATCH_SIZE
 
     for batch_start in range(0, len(rows), LLM_BATCH_SIZE):
         batch = rows[batch_start: batch_start + LLM_BATCH_SIZE]
+        batch_num = batch_start // LLM_BATCH_SIZE + 1
+        print(f"[Filter 3] Batch {batch_num}/{total_batches} ({len(batch)} companies)…")
         scores = _score_batch(client, batch, query, criteria)
 
         for local_i, (orig_idx, _) in enumerate(batch):
