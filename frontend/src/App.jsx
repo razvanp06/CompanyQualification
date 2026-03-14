@@ -40,8 +40,7 @@ function adaptCompany(c) {
       : addr || "";
 
   const score = Math.round((c.final_score || 0) * 100);
-  // Backend already filtered — top 20 by rank are qualified, rest are borderline
-  const qualified = c.rank <= 20;
+  const qualified = score >= 70;
 
   const signals = [];
   if (c.rag_score > 0)
@@ -463,12 +462,10 @@ export default function App() {
   };
 
   const allScored = results?.scored ? [...results.scored].sort((a, b) => b.score - a.score) : [];
-  const avgScore = allScored.length
-    ? allScored.reduce((sum, r) => sum + r.score, 0) / allScored.length
-    : 0;
-  const threshold = avgScore / 2;
-  const qualified = allScored.filter((r) => r.score >= threshold);
-  const displayed = qualified;
+  // Show only green results (≥70%). If none qualify, show the top 3 so the page is never empty.
+  const GREEN_THRESHOLD = 70;
+  const qualified = allScored.filter((r) => r.score >= GREEN_THRESHOLD);
+  const displayed = qualified.length > 0 ? qualified : allScored.slice(0, 3);
 
   return (
     <>
