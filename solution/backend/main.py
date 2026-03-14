@@ -5,7 +5,6 @@ import sys
 import os
 import math
 import json
-import torch
 import psutil
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,10 +33,9 @@ class QueryRequest(BaseModel):
 
 @app.get("/diagnostics")
 def diagnostics():
-    gpu_ok = torch.cuda.is_available()
     return {
-        "gpu": gpu_ok, 
-        "message": "CPU OPTIMIZED (5x faster!)",
+        "gpu": False,
+        "message": "CPU mode",
         "ram_free_gb": round(psutil.virtual_memory().available / 1e9, 1)
     }
 

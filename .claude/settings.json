@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//tmp/**)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)"
+    ]
+  }
+}

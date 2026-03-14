@@ -63,7 +63,7 @@ def apply_structured_filter(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     min_emp = intent.get("min_employees")
     max_emp = intent.get("max_employees")
     if min_emp is not None:
-        mask &= df["employee_count"].fillna(0) >= min_emp
+        mask &= (df["employee_count"].isna()) | (df["employee_count"] >= min_emp)
     if max_emp is not None:
         # Include companies with unknown employee count rather than exclude them
         mask &= (df["employee_count"].isna()) | (df["employee_count"] <= max_emp)
@@ -72,7 +72,7 @@ def apply_structured_filter(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     min_rev = intent.get("min_revenue")
     max_rev = intent.get("max_revenue")
     if min_rev is not None:
-        mask &= df["revenue"].fillna(0) >= min_rev
+        mask &= (df["revenue"].isna()) | (df["revenue"] >= min_rev)
     if max_rev is not None:
         mask &= (df["revenue"].isna()) | (df["revenue"] <= max_rev)
 
@@ -80,7 +80,7 @@ def apply_structured_filter(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     min_year = intent.get("min_year_founded")
     max_year = intent.get("max_year_founded")
     if min_year is not None:
-        mask &= df["year_founded"].fillna(0) >= min_year
+        mask &= (df["year_founded"].isna()) | (df["year_founded"] >= min_year)
     if max_year is not None:
         mask &= (df["year_founded"].isna()) | (df["year_founded"] <= max_year)
 

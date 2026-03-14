@@ -255,7 +255,38 @@ def extract_intent(query: str) -> dict:
         criteria.append("is a private company")
     if business_models:
         criteria.append(f"uses business model: {', '.join(business_models)}")
-    criteria.append(f"relevant to the query: {query}")
+    # Industry-specific criteria — these give the LLM precise language instead of
+    # vague "relevant to query", preventing energy/chemical companies being confused
+    # with pharmaceutical/logistics etc.
+    _INDUSTRY_HINTS = {
+        ("pharmaceutical", "pharma", "drug", "medicine", "medicament"):
+            "primary business is pharmaceutical manufacturing, drug distribution, or medicine retail (NOT generic chemicals or consumer goods)",
+        ("logistics", "transport", "freight", "shipping", "courier", "trucking", "warehousing", "supply chain"):
+            "primary business is freight, trucking, warehousing, courier, rail/road/sea transport, or supply chain (NOT energy/gas/oil distribution)",
+        ("software", "saas", "tech", "technology", "it ", "information technology"):
+            "primary business is software development, SaaS products, or IT services",
+        ("manufacturing", "production", "factory"):
+            "primary business is physical goods manufacturing or production",
+        ("retail", "e-commerce", "ecommerce", "shop", "store"):
+            "primary business is retail or e-commerce sales to end consumers",
+        ("finance", "banking", "insurance", "fintech"):
+            "primary business is financial services, banking, insurance, or fintech",
+        ("energy", "oil", "gas", "renewable", "solar", "wind", "electricity"):
+            "primary business is energy production, oil/gas extraction, or renewable energy",
+        ("food", "beverage", "restaurant", "catering"):
+            "primary business is food/beverage manufacturing, distribution, or food service",
+        ("real estate", "property", "construction"):
+            "primary business is real estate, property development, or construction",
+    }
+    industry_hint = None
+    for keywords, hint in _INDUSTRY_HINTS.items():
+        if any(kw in q for kw in keywords):
+            industry_hint = hint
+            break
+    if industry_hint:
+        criteria.append(f"company's {industry_hint}")
+    else:
+        criteria.append(f"relevant to the query: {query}")
 
     return {
         "result_count": result_count,
