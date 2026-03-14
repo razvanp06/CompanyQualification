@@ -462,8 +462,16 @@ export default function App() {
     if (query.trim() && !loading) run(query.trim());
   };
 
-  const qualified = results?.scored?.filter((r) => r.qualified) || [];
-  const rejected = results?.scored?.filter((r) => !r.qualified) || [];
+  const allScored = results?.scored ? [...results.scored].sort((a, b) => b.score - a.score) : [];
+  // Qualified = companies where LLM matched at least 1 criterion (rag_score > 0)
+  // Fallback: if LLM scored nothing, use top half by embedding score
+  const hasLlmScores = allScored.some((r) => (r.rag_score ?? r.llm_score ?? 0) > 0);
+  const qualified = hasLlmScores
+    ? allScored.filter((r) => (r.rag_score ?? r.llm_score ?? 0) > 0)
+    : allScored.slice(0, Math.ceil(allScored.length / 2));
+  const rejected = hasLlmScores
+    ? allScored.filter((r) => (r.rag_score ?? r.llm_score ?? 0) === 0)
+    : allScored.slice(Math.ceil(allScored.length / 2));
   const displayed = tab === "qualified" ? qualified : rejected;
 
   return (

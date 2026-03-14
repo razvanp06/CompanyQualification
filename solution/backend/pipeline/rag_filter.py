@@ -238,16 +238,21 @@ def rag_rank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
         if len(retrieved_indices) >= RAG_TOP_K:
             break
 
-    candidates = df.loc[retrieved_indices].copy()
+    # Deduplicate indices while preserving similarity order
+    seen: set[int] = set()
+    unique_indices = [i for i in retrieved_indices if not (i in seen or seen.add(i))]
+    candidates = df.loc[unique_indices].copy()
     candidates["embedding_score"] = candidates.index.map(embedding_scores)
     print(f"[RAG Filter] Retrieved {len(candidates)} candidates via FAISS")
 
     # ── Step B: Parallel Qwen2.5-72B scoring ──────────────────────────────────
-    # When no criteria, skip LLM — embedding_score alone drives the ranking
+    # When no criteria extracted, derive implicit ones from the semantic query
     if not criteria:
-        candidates["rag_score"] = 0
-        candidates["match_reasons"] = ""
-        return candidates
+        criteria = [
+            f"relevant to the query: {semantic_query}",
+            "matches the industry or sector described in the query",
+            "matches the geographic location described in the query",
+        ]
 
     llm = ChatOpenAI(
         model=LLM_RERANK_MODEL,

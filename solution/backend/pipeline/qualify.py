@@ -132,8 +132,19 @@ def qualify(query: str, top_n: int = FINAL_TOP_N) -> dict:
             return None
         return val
 
+    # Deduplicate by operational_name before building output
+    seen_names: set = set()
+    deduped = []
+    for idx, row in reranked.iterrows():
+        name = row.get("operational_name") or row.get("website") or str(idx)
+        if name not in seen_names:
+            seen_names.add(name)
+            deduped.append(row)
+        if len(deduped) >= result_count:
+            break
+
     results = []
-    for rank, (_, row) in enumerate(reranked.head(result_count).iterrows(), start=1):
+    for rank, row in enumerate(deduped, start=1):
         entry = {"rank": rank}
         for col in output_cols:
             entry[col] = _clean(row.get(col))
