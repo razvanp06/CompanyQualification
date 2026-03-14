@@ -268,8 +268,6 @@ def rag_rank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
         (bn + 1, rows[bs: bs + LLM_BATCH_SIZE])
         for bn, bs in enumerate(range(0, len(rows), LLM_BATCH_SIZE))
     ]
-
-    # Fire all batches in parallel — wall time ≈ slowest single batch
     all_results: dict[int, dict] = {}
 
     def _run_batch(batch_num: int, batch: list) -> tuple[int, list, list[dict]]:

@@ -427,7 +427,7 @@ function ParsedPanel({ parsed }) {
 export default function App() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
-  const [tab, setTab] = useState("qualified");
+
   const [time, setTime] = useState(0);
   const [loading, setLoading] = useState(false);
   const [totalCompanies, setTotalCompanies] = useState(477);
@@ -463,16 +463,12 @@ export default function App() {
   };
 
   const allScored = results?.scored ? [...results.scored].sort((a, b) => b.score - a.score) : [];
-  // Qualified = companies where LLM matched at least 1 criterion (rag_score > 0)
-  // Fallback: if LLM scored nothing, use top half by embedding score
-  const hasLlmScores = allScored.some((r) => (r.rag_score ?? r.llm_score ?? 0) > 0);
-  const qualified = hasLlmScores
-    ? allScored.filter((r) => (r.rag_score ?? r.llm_score ?? 0) > 0)
-    : allScored.slice(0, Math.ceil(allScored.length / 2));
-  const rejected = hasLlmScores
-    ? allScored.filter((r) => (r.rag_score ?? r.llm_score ?? 0) === 0)
-    : allScored.slice(Math.ceil(allScored.length / 2));
-  const displayed = tab === "qualified" ? qualified : rejected;
+  const avgScore = allScored.length
+    ? allScored.reduce((sum, r) => sum + r.score, 0) / allScored.length
+    : 0;
+  const threshold = avgScore / 2;
+  const qualified = allScored.filter((r) => r.score >= threshold);
+  const displayed = qualified;
 
   return (
     <>
@@ -701,20 +697,6 @@ export default function App() {
                     gap: 5,
                     padding: "3px 9px",
                     borderRadius: 100,
-                    background: "rgba(255,77,106,0.1)",
-                    color: "#ff4d6a",
-                    fontWeight: 500,
-                  }}
-                >
-                  ✗ {rejected.length} rejected
-                </span>
-                <span
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: "3px 9px",
-                    borderRadius: 100,
                     background: "rgba(77,166,255,0.1)",
                     color: "#4da6ff",
                     fontWeight: 500,
@@ -726,48 +708,6 @@ export default function App() {
             </div>
 
             <ParsedPanel parsed={results.parsed} />
-
-            {/* Tabs */}
-            <div
-              style={{
-                display: "flex",
-                gap: 0,
-                marginBottom: 18,
-                borderBottom: "1px solid #2a2e38",
-              }}
-            >
-              {["qualified", "rejected"].map((t) => (
-                <button
-                  key={t}
-                  className="tab-btn"
-                  onClick={() => setTab(t)}
-                  style={{
-                    padding: "9px 18px",
-                    fontSize: "0.85rem",
-                    fontWeight: 500,
-                    color: tab === t ? "#00e5a0" : "#5a5f70",
-                    borderBottom:
-                      tab === t ? "2px solid #00e5a0" : "2px solid transparent",
-                    background: "none",
-                    border: "none",
-                    borderBottomStyle: "solid",
-                    fontFamily: '"Outfit",sans-serif',
-                  }}
-                >
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                  <span
-                    style={{
-                      fontFamily: '"DM Mono",monospace',
-                      fontSize: "0.7rem",
-                      marginLeft: 6,
-                      opacity: 0.6,
-                    }}
-                  >
-                    {t === "qualified" ? qualified.length : rejected.length}
-                  </span>
-                </button>
-              ))}
-            </div>
 
             {/* Cards */}
             {displayed.length > 0 ? (
@@ -793,9 +733,7 @@ export default function App() {
                     marginBottom: 4,
                   }}
                 >
-                  {tab === "qualified"
-                    ? "No companies qualified"
-                    : "All companies were qualified!"}
+                  No companies qualified
                 </p>
                 <p style={{ fontSize: "0.85rem" }}>
                   Try a different query or adjust your criteria

@@ -15,36 +15,34 @@ from config import FEATHERLESS_API_KEY, FEATHERLESS_BASE_URL, LLM_INTENT_MODEL
 
 
 SYSTEM_PROMPT = """You are a query parser for a company search system.
-Given a user query, extract structured constraints and return ONLY valid JSON.
+The user query may be in any language. Understand it regardless of language, then extract structured constraints and return ONLY valid JSON — no extra text, no explanations, no lists.
 
 Return this exact schema (use null for unspecified fields):
 {
-  "result_count": <integer or null>,      // how many companies the user wants (null = return all matches)
-  "countries": <list of ISO-2 country codes or null>,  // e.g. ["de","fr"] - null means any country
+  "result_count": <integer or null>,
+  "countries": <list of ISO-2 country codes or null>,
   "min_employees": <integer or null>,
   "max_employees": <integer or null>,
-  "min_revenue": <number or null>,        // in USD
-  "max_revenue": <number or null>,        // in USD
+  "min_revenue": <number or null>,
+  "max_revenue": <number or null>,
   "min_year_founded": <integer or null>,
   "max_year_founded": <integer or null>,
   "is_public": <true/false or null>,
-  "business_models": <list of strings or null>,  // e.g. ["B2B","SaaS"]
-  "semantic_query": "<string>",           // cleaned query optimised for embedding search
-  "criteria": [                           // list of discrete criteria the company must satisfy
-    "<criterion 1>",
-    "<criterion 2>"
-  ]
+  "business_models": <list of strings or null>,
+  "semantic_query": "<English description of what kind of companies to find>",
+  "criteria": ["<criterion in English 1>", "<criterion in English 2>"]
 }
 
-Country code mapping examples: Germany=de, France=fr, Romania=ro, Switzerland=ch,
+Country code mapping: Germany=de, France=fr, Romania=ro, Switzerland=ch,
 United States=us, Sweden=se, Norway=no, Denmark=dk, Finland=fi.
-"Scandinavia" -> ["se","no","dk"]. "Europe" -> null (too broad to enumerate).
+"Scandinavia" -> ["se","no","dk"]. "Europe" -> null.
 
-Revenue interpretation: "$50 million" -> 50000000. "over" / "more than" -> min only.
+Revenue: "$50 million" -> 50000000. "over/more than" -> min only.
 
-Criteria should be short, concrete, and independently verifiable:
-- Good: "operates in logistics sector", "founded after 2018", "provides HR software"
-- Bad: "is a good company", "matches the query"
+semantic_query and criteria MUST always be in English.
+Criteria must be short and independently verifiable:
+- Good: "operates in oil and gas sector", "founded after 2018"
+- Bad: "is a good company", "petroliere"
 """
 
 
