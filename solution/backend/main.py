@@ -39,11 +39,11 @@ class QueryRequest(BaseModel):
 
 @app.on_event("startup")
 async def startup():
-    """Pre-load data and warm up the embedding model on startup."""
-    _load_data()
-    from pipeline.rag_filter import _get_embeddings
-    _get_embeddings()
-    print("Startup complete — data and embedding model loaded.")
+    """Pre-load data and build the global FAISS index at startup (once)."""
+    df = _load_data()
+    from pipeline.rag_filter import build_global_index
+    build_global_index(df)
+    print("Startup complete — data loaded and FAISS index built.")
 
 
 @app.get("/health")

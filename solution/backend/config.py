@@ -15,11 +15,11 @@ LLM_INTENT_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 # Filter 2 — LangChain RAG pipeline
 # Retrieval: local sentence-transformer embeddings + FAISS vector store
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"   # local, free, fast
-RAG_TOP_K = 80                          # top companies retrieved before LLM scoring
+RAG_TOP_K = 40                          # top companies retrieved before LLM scoring
 
-# Scoring: Qwen2.5-72B-Instruct via featherless.ai — same RAG+LLM approach as Perplexity
-LLM_RERANK_MODEL = "Qwen/Qwen2.5-72B-Instruct"
-LLM_BATCH_SIZE = 10                     # companies per LLM scoring call
+# Scoring: same 8B model as intent extraction — fast, proven to work, ~10x faster than 72B
+LLM_RERANK_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+LLM_BATCH_SIZE = 20                     # 40 candidates / 20 per batch = 2 parallel calls
 
 # Scoring
 STRUCTURED_FILTER_KEEPS = 200   # max companies kept after pandas filter (0 = disabled)

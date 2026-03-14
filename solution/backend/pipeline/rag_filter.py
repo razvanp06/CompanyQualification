@@ -1,25 +1,26 @@
 """
 Filter 2 — LangChain RAG Pipeline
 
-Replicates Perplexity's approach: fast vector retrieval + precise LLM reasoning.
+Perplexity's speed comes from two things this module replicates:
+  1. Pre-built index  — FAISS is built ONCE at startup from all 477 companies
+                        and reused for every query (never rebuilt per-query).
+  2. Parallel scoring — all LLM batches are fired concurrently via
+                        ThreadPoolExecutor instead of sequentially.
 
-Step A — Retrieval (like Perplexity's search):
-    Builds a FAISS vector store from the filtered company set using local
-    sentence-transformer embeddings. Retrieves the top RAG_TOP_K most
-    semantically relevant companies for the query.
+Step A — Retrieval:
+    Searches the global FAISS index, filters to companies that passed
+    Filter 1 (structured), keeps top RAG_TOP_K by cosine similarity.
+    Returns continuous embedding_score [0, 1] per company.
 
-Step B — Scoring (like Perplexity's answer generation):
-    Sends retrieved companies in batches to Qwen2.5-72B-Instruct via
-    featherless.ai using LangChain's ChatOpenAI. The model evaluates each
-    company against the extracted criteria and returns structured scores.
-
-Returns a DataFrame with 'rag_score' and 'match_reasons' columns,
-sorted by rag_score descending.
+Step B — Parallel Qwen2.5-72B scoring:
+    All batches submitted simultaneously. Wall-clock time ≈ one batch's
+    latency instead of N × latency.
 """
 
 import json
 import re
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -61,8 +62,10 @@ Be strict: only mark a criterion true if there is clear evidence in the profile.
 Missing data should be treated as unknown (false), not assumed true.
 """
 
-# Cache the embedding model — heavy to load, reuse across queries
+# ── Module-level caches (built once at startup, reused for every query) ───────
 _embeddings: HuggingFaceEmbeddings | None = None
+_vector_store: FAISS | None = None          # global FAISS index over all companies
+_total_companies: int = 0                   # size of the indexed dataset
 
 
 def _get_embeddings() -> HuggingFaceEmbeddings:
@@ -70,6 +73,26 @@ def _get_embeddings() -> HuggingFaceEmbeddings:
     if _embeddings is None:
         _embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
     return _embeddings
+
+
+def build_global_index(df: pd.DataFrame) -> None:
+    """
+    Build the FAISS index from the FULL dataset.
+    Called once at startup — never called again per query.
+    """
+    global _vector_store, _total_companies
+    print(f"[RAG Filter] Building global FAISS index for {len(df)} companies…")
+    embeddings = _get_embeddings()
+    docs = [
+        Document(
+            page_content=_build_company_text(row),
+            metadata={"df_index": idx},
+        )
+        for idx, row in df.iterrows()
+    ]
+    _vector_store = FAISS.from_documents(docs, embeddings)
+    _total_companies = len(df)
+    print(f"[RAG Filter] Global FAISS index ready ({_total_companies} companies)")
 
 
 def _build_company_text(row: pd.Series) -> str:
@@ -166,15 +189,14 @@ def rag_rank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     """
     Two-step RAG pipeline:
 
-    1. FAISS retrieval — retrieves top RAG_TOP_K companies by cosine similarity
-       and stores the continuous similarity score as 'embedding_score' [0, 1].
-    2. Qwen2.5-72B scoring — evaluates each company against criteria, producing
-       an integer 'rag_score' (criteria matched count).
+    1. Global FAISS retrieval (pre-built, instant) — searches the index built
+       at startup, filters to companies that passed Filter 1, keeps top
+       RAG_TOP_K by cosine similarity. Stores embedding_score [0, 1].
 
-    Final score in qualify.py combines both:
-        final_score = 0.4 * embedding_score + 0.6 * (rag_score / max_rag)
+    2. Parallel Qwen2.5-72B scoring — all batches run concurrently so
+       wall-clock time ≈ one batch's latency regardless of how many batches.
 
-    This guarantees a smooth gradient — companies never all land at 100% or 0%.
+    Final score: 0.4 × embedding_score + 0.6 × (rag_score / max_rag)
     """
     semantic_query = intent.get("semantic_query") or intent.get("original_query", "")
     query = intent.get("original_query") or semantic_query
@@ -188,38 +210,39 @@ def rag_rank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
         df["match_reasons"] = ""
         return df
 
-    # ── Step A: LangChain FAISS retrieval ─────────────────────────────────────
-    print(f"[RAG Filter] Building FAISS index for {len(df)} companies…")
-    embeddings = _get_embeddings()
+    # ── Step A: FAISS retrieval from pre-built global index ────────────────────
+    global _vector_store
+    if _vector_store is None:
+        # Fallback if startup didn't build the index (should not happen normally)
+        build_global_index(df)
 
-    docs = [
-        Document(
-            page_content=_build_company_text(row),
-            metadata={"df_index": idx},
-        )
-        for idx, row in df.iterrows()
-    ]
-    vector_store = FAISS.from_documents(docs, embeddings)
+    filtered_indices = set(df.index.tolist())
 
-    top_k = min(RAG_TOP_K, len(df))
+    # Search all companies in the global index — FAISS search on 477 vectors
+    # takes microseconds, so fetching all is negligible cost
+    all_retrieved = _vector_store.similarity_search_with_score(
+        semantic_query, k=_total_companies or len(df)
+    )
 
-    # similarity_search_with_score returns (Document, L2_distance)
-    # For L2-normalized vectors: cosine_similarity = 1 - L2² / 2  → clipped to [0, 1]
-    retrieved = vector_store.similarity_search_with_score(semantic_query, k=top_k)
-
+    # Keep only companies that passed Filter 1, ranked by similarity
     retrieved_indices = []
     embedding_scores: dict[int, float] = {}
-    for doc, l2_dist in retrieved:
+    for doc, l2_dist in all_retrieved:
         idx = doc.metadata["df_index"]
-        retrieved_indices.append(idx)
+        if idx not in filtered_indices:
+            continue
+        # L2-normalized vectors: cosine_similarity = 1 - L2² / 2, clipped to [0, 1]
         cosine_sim = max(0.0, 1.0 - (float(l2_dist) ** 2) / 2.0)
+        retrieved_indices.append(idx)
         embedding_scores[idx] = cosine_sim
+        if len(retrieved_indices) >= RAG_TOP_K:
+            break
 
     candidates = df.loc[retrieved_indices].copy()
     candidates["embedding_score"] = candidates.index.map(embedding_scores)
     print(f"[RAG Filter] Retrieved {len(candidates)} candidates via FAISS")
 
-    # ── Step B: Qwen2.5-72B scoring ───────────────────────────────────────────
+    # ── Step B: Parallel Qwen2.5-72B scoring ──────────────────────────────────
     # When no criteria, skip LLM — embedding_score alone drives the ranking
     if not criteria:
         candidates["rag_score"] = 0
@@ -235,20 +258,27 @@ def rag_rank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     )
 
     rows = list(candidates.iterrows())
-    all_results: dict[int, dict] = {}
     total_batches = (len(rows) + LLM_BATCH_SIZE - 1) // LLM_BATCH_SIZE
+    batches = [
+        (bn + 1, rows[bs: bs + LLM_BATCH_SIZE])
+        for bn, bs in enumerate(range(0, len(rows), LLM_BATCH_SIZE))
+    ]
 
-    for batch_start in range(0, len(rows), LLM_BATCH_SIZE):
-        batch = rows[batch_start: batch_start + LLM_BATCH_SIZE]
-        batch_num = batch_start // LLM_BATCH_SIZE + 1
-        print(f"[RAG Filter] Scoring batch {batch_num}/{total_batches} with Qwen2.5-72B…")
+    # Fire all batches in parallel — wall time ≈ slowest single batch
+    all_results: dict[int, dict] = {}
+
+    def _run_batch(batch_num: int, batch: list) -> tuple[int, list, list[dict]]:
+        print(f"[RAG Filter] Batch {batch_num}/{total_batches} started…")
         scores = _score_batch(llm, batch, query, criteria)
+        print(f"[RAG Filter] Batch {batch_num}/{total_batches} done")
+        return batch_num, batch, scores
 
-        for local_i, (orig_idx, _) in enumerate(batch):
-            if local_i < len(scores):
-                all_results[orig_idx] = scores[local_i]
-            else:
-                all_results[orig_idx] = {"total": 0, "reason": ""}
+    with ThreadPoolExecutor(max_workers=total_batches) as executor:
+        futures = [executor.submit(_run_batch, bn, batch) for bn, batch in batches]
+        for future in as_completed(futures):
+            _, batch, scores = future.result()
+            for local_i, (orig_idx, _) in enumerate(batch):
+                all_results[orig_idx] = scores[local_i] if local_i < len(scores) else {"total": 0, "reason": ""}
 
     candidates["rag_score"] = candidates.index.map(
         lambda i: all_results.get(i, {}).get("total", 0)
