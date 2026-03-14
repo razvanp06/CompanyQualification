@@ -1,53 +1,1494 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 
-// ─── BACKEND CONNECTION ──────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8000";
+// ─── EMBEDDED DATA ──────────────────────────────────────────────────────────
+const COMPANIES = [
+  {
+    operational_name: "Meridian Logistics GmbH",
+    website: "meridian-logistics.de",
+    year_founded: 2003,
+    address: "Munich, Germany",
+    employee_count: 342,
+    revenue: 48000000,
+    primary_naics: {
+      code: "488510",
+      label: "Freight Transportation Arrangement",
+    },
+    secondary_naics: [
+      { code: "493110", label: "General Warehousing and Storage" },
+    ],
+    description:
+      "Full-service freight forwarding and supply chain management company offering customs brokerage, warehousing, and transportation solutions across Europe.",
+    business_model: ["B2B", "Service Provider"],
+    core_offerings: ["freight forwarding", "customs brokerage", "warehousing"],
+    target_markets: ["automotive", "manufacturing"],
+    is_public: false,
+  },
+  {
+    operational_name: "TransBalkan SRL",
+    website: "transbalkan.ro",
+    year_founded: 2011,
+    address: "Bucharest, Romania",
+    employee_count: 180,
+    revenue: 12000000,
+    primary_naics: {
+      code: "484121",
+      label: "General Freight Trucking, Long-Distance, Truckload",
+    },
+    secondary_naics: [
+      { code: "493110", label: "General Warehousing and Storage" },
+    ],
+    description:
+      "Romanian freight and logistics company specializing in cross-border trucking and warehousing services across the Balkans and Central Europe.",
+    business_model: ["B2B", "Service Provider"],
+    core_offerings: [
+      "freight trucking",
+      "warehousing",
+      "cross-border logistics",
+    ],
+    target_markets: ["retail", "agriculture"],
+    is_public: false,
+  },
+  {
+    operational_name: "Cargus Express",
+    website: "cargus.ro",
+    year_founded: 2001,
+    address: "Cluj-Napoca, Romania",
+    employee_count: 2200,
+    revenue: 95000000,
+    primary_naics: {
+      code: "492110",
+      label: "Couriers and Express Delivery Services",
+    },
+    secondary_naics: [
+      { code: "488510", label: "Freight Transportation Arrangement" },
+    ],
+    description:
+      "Leading Romanian courier and parcel delivery service offering nationwide express shipping, last-mile delivery, and e-commerce fulfillment solutions.",
+    business_model: ["B2B", "B2C"],
+    core_offerings: [
+      "courier services",
+      "parcel delivery",
+      "e-commerce fulfillment",
+    ],
+    target_markets: ["e-commerce", "retail"],
+    is_public: false,
+  },
+  {
+    operational_name: "SAP SE",
+    website: "sap.com",
+    year_founded: 1972,
+    address: "Walldorf, Germany",
+    employee_count: 107000,
+    revenue: 31000000000,
+    primary_naics: { code: "511210", label: "Software Publishers" },
+    secondary_naics: [
+      { code: "541512", label: "Computer Systems Design Services" },
+    ],
+    description:
+      "Multinational software corporation providing enterprise resource planning, supply chain management, and business intelligence solutions globally.",
+    business_model: ["B2B", "SaaS"],
+    core_offerings: [
+      "ERP software",
+      "cloud computing",
+      "business intelligence",
+    ],
+    target_markets: ["enterprise", "manufacturing", "finance"],
+    is_public: true,
+  },
+  {
+    operational_name: "Stripe Inc",
+    website: "stripe.com",
+    year_founded: 2010,
+    address: "San Francisco, United States",
+    employee_count: 8000,
+    revenue: 14000000000,
+    primary_naics: {
+      code: "522320",
+      label: "Financial Transactions Processing",
+    },
+    secondary_naics: [{ code: "511210", label: "Software Publishers" }],
+    description:
+      "Financial infrastructure platform for the internet enabling businesses to accept payments, manage revenue, and accelerate growth through technology.",
+    business_model: ["B2B", "SaaS", "Platform"],
+    core_offerings: ["payment processing", "billing", "financial APIs"],
+    target_markets: ["e-commerce", "SaaS", "marketplace"],
+    is_public: false,
+  },
+  {
+    operational_name: "Revolut Ltd",
+    website: "revolut.com",
+    year_founded: 2015,
+    address: "London, United Kingdom",
+    employee_count: 6000,
+    revenue: 1800000000,
+    primary_naics: { code: "522110", label: "Commercial Banking" },
+    secondary_naics: [
+      { code: "522320", label: "Financial Transactions Processing" },
+    ],
+    description:
+      "Digital banking alternative offering multi-currency accounts, cryptocurrency trading, stock investing, and international money transfers via mobile app.",
+    business_model: ["B2C", "B2B", "Fintech"],
+    core_offerings: [
+      "digital banking",
+      "currency exchange",
+      "crypto trading",
+      "investing",
+    ],
+    target_markets: ["consumers", "freelancers", "SMBs"],
+    is_public: false,
+  },
+  {
+    operational_name: "N26 GmbH",
+    website: "n26.com",
+    year_founded: 2013,
+    address: "Berlin, Germany",
+    employee_count: 1500,
+    revenue: 300000000,
+    primary_naics: { code: "522110", label: "Commercial Banking" },
+    secondary_naics: [
+      { code: "522320", label: "Financial Transactions Processing" },
+    ],
+    description:
+      "European mobile bank offering fee-free current accounts, savings, investments, and insurance products entirely through a smartphone application.",
+    business_model: ["B2C", "Fintech"],
+    core_offerings: ["mobile banking", "savings", "insurance", "investing"],
+    target_markets: ["consumers", "millennials"],
+    is_public: false,
+  },
+  {
+    operational_name: "Klarna AB",
+    website: "klarna.com",
+    year_founded: 2005,
+    address: "Stockholm, Sweden",
+    employee_count: 5000,
+    revenue: 1900000000,
+    primary_naics: {
+      code: "522298",
+      label: "All Other Nondepository Credit Intermediation",
+    },
+    secondary_naics: [
+      { code: "522320", label: "Financial Transactions Processing" },
+    ],
+    description:
+      "Swedish fintech providing buy-now-pay-later solutions, online payment processing, and direct-to-consumer shopping services globally.",
+    business_model: ["B2B", "B2C", "Fintech"],
+    core_offerings: ["buy now pay later", "payment solutions", "shopping app"],
+    target_markets: ["e-commerce", "retail", "consumers"],
+    is_public: false,
+  },
+  {
+    operational_name: "Danone SA",
+    website: "danone.com",
+    year_founded: 1919,
+    address: "Paris, France",
+    employee_count: 96000,
+    revenue: 27600000000,
+    primary_naics: { code: "311511", label: "Fluid Milk Manufacturing" },
+    secondary_naics: [{ code: "311421", label: "Fruit and Vegetable Canning" }],
+    description:
+      "Multinational food company producing dairy products, plant-based alternatives, bottled water, and specialized nutrition products sold worldwide.",
+    business_model: ["B2C", "B2B"],
+    core_offerings: [
+      "dairy products",
+      "bottled water",
+      "plant-based foods",
+      "specialized nutrition",
+    ],
+    target_markets: ["consumers", "healthcare", "retail"],
+    is_public: true,
+  },
+  {
+    operational_name: "Pernod Ricard",
+    website: "pernod-ricard.com",
+    year_founded: 1975,
+    address: "Paris, France",
+    employee_count: 18500,
+    revenue: 12100000000,
+    primary_naics: { code: "312140", label: "Distilleries" },
+    secondary_naics: [{ code: "312130", label: "Wineries" }],
+    description:
+      "French spirits and wine company owning a premium portfolio of international brands including Absolut, Jameson, Ricard, and Chivas Regal.",
+    business_model: ["B2B", "B2C"],
+    core_offerings: ["spirits", "wine", "premium beverages"],
+    target_markets: ["hospitality", "retail", "consumers"],
+    is_public: true,
+  },
+  {
+    operational_name: "Lactalis Group",
+    website: "lactalis.fr",
+    year_founded: 1933,
+    address: "Laval, France",
+    employee_count: 85000,
+    revenue: 28000000000,
+    primary_naics: { code: "311513", label: "Cheese Manufacturing" },
+    secondary_naics: [{ code: "311511", label: "Fluid Milk Manufacturing" }],
+    description:
+      "World's largest dairy group producing cheese, milk, yogurt, and butter under brands including Président, Galbani, and Parmalat.",
+    business_model: ["B2B", "B2C"],
+    core_offerings: ["cheese", "milk", "yogurt", "butter"],
+    target_markets: ["retail", "food service"],
+    is_public: false,
+  },
+  {
+    operational_name: "Amcor plc",
+    website: "amcor.com",
+    year_founded: 1860,
+    address: "Zurich, Switzerland",
+    employee_count: 42500,
+    revenue: 14700000000,
+    primary_naics: {
+      code: "322211",
+      label: "Corrugated and Solid Fiber Box Manufacturing",
+    },
+    secondary_naics: [
+      {
+        code: "326112",
+        label: "Plastics Packaging Film and Sheet Manufacturing",
+      },
+    ],
+    description:
+      "Global packaging company developing and producing flexible and rigid packaging solutions for food, beverage, pharmaceutical, medical, home, and personal care industries.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "flexible packaging",
+      "rigid packaging",
+      "specialty cartons",
+    ],
+    target_markets: ["food", "beverage", "healthcare", "personal care"],
+    is_public: true,
+  },
+  {
+    operational_name: "Berlin Packaging",
+    website: "berlinpackaging.com",
+    year_founded: 1898,
+    address: "Chicago, United States",
+    employee_count: 3000,
+    revenue: 3000000000,
+    primary_naics: { code: "326160", label: "Plastics Bottle Manufacturing" },
+    secondary_naics: [
+      { code: "327213", label: "Glass Container Manufacturing" },
+    ],
+    description:
+      "Hybrid packaging supplier offering glass, plastic, and metal containers along with closures and design services for beauty, food, beverage, and pharmaceutical industries.",
+    business_model: ["B2B"],
+    core_offerings: ["bottles", "jars", "closures", "packaging design"],
+    target_markets: ["beauty", "food", "beverage", "pharmaceutical"],
+    is_public: false,
+  },
+  {
+    operational_name: "Sealed Air Corporation",
+    website: "sealedair.com",
+    year_founded: 1960,
+    address: "Charlotte, United States",
+    employee_count: 16500,
+    revenue: 5500000000,
+    primary_naics: {
+      code: "326112",
+      label: "Plastics Packaging Film and Sheet Manufacturing",
+    },
+    secondary_naics: [
+      { code: "322211", label: "Corrugated and Solid Fiber Box Manufacturing" },
+    ],
+    description:
+      "Packaging solutions company known for Bubble Wrap and Cryovac brands, providing food safety and product protection solutions globally.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "protective packaging",
+      "food packaging",
+      "automation solutions",
+    ],
+    target_markets: ["food", "e-commerce", "industrial"],
+    is_public: true,
+  },
+  {
+    operational_name: "Turner Construction",
+    website: "turnerconstruction.com",
+    year_founded: 1902,
+    address: "New York, United States",
+    employee_count: 10000,
+    revenue: 16000000000,
+    primary_naics: {
+      code: "236220",
+      label: "Commercial and Institutional Building Construction",
+    },
+    secondary_naics: [
+      { code: "237310", label: "Highway, Street, and Bridge Construction" },
+    ],
+    description:
+      "Leading American construction company providing general contracting, construction management, and project development services for commercial, institutional, and infrastructure projects.",
+    business_model: ["B2B", "B2G"],
+    core_offerings: [
+      "general contracting",
+      "construction management",
+      "project development",
+    ],
+    target_markets: [
+      "commercial real estate",
+      "healthcare",
+      "education",
+      "government",
+    ],
+    is_public: false,
+  },
+  {
+    operational_name: "Bechtel Corporation",
+    website: "bechtel.com",
+    year_founded: 1898,
+    address: "Reston, United States",
+    employee_count: 55000,
+    revenue: 21800000000,
+    primary_naics: {
+      code: "237120",
+      label: "Oil and Gas Pipeline and Related Structures Construction",
+    },
+    secondary_naics: [
+      { code: "236210", label: "Industrial Building Construction" },
+    ],
+    description:
+      "One of the largest construction and civil engineering companies in the world, building infrastructure for energy, transportation, telecommunications, and government sectors.",
+    business_model: ["B2B", "B2G"],
+    core_offerings: ["engineering", "construction", "project management"],
+    target_markets: ["energy", "infrastructure", "defense", "mining"],
+    is_public: false,
+  },
+  {
+    operational_name: "Kiewit Corporation",
+    website: "kiewit.com",
+    year_founded: 1884,
+    address: "Omaha, United States",
+    employee_count: 29000,
+    revenue: 14300000000,
+    primary_naics: {
+      code: "237310",
+      label: "Highway, Street, and Bridge Construction",
+    },
+    secondary_naics: [
+      { code: "236210", label: "Industrial Building Construction" },
+    ],
+    description:
+      "American construction and engineering company specializing in transportation, water, power, oil and gas, and building projects across North America.",
+    business_model: ["B2B", "B2G"],
+    core_offerings: [
+      "heavy civil construction",
+      "transportation infrastructure",
+      "power construction",
+    ],
+    target_markets: ["transportation", "water", "energy"],
+    is_public: false,
+  },
+  {
+    operational_name: "Novartis AG",
+    website: "novartis.com",
+    year_founded: 1996,
+    address: "Basel, Switzerland",
+    employee_count: 76000,
+    revenue: 51600000000,
+    primary_naics: {
+      code: "325412",
+      label: "Pharmaceutical Preparation Manufacturing",
+    },
+    secondary_naics: [
+      { code: "325414", label: "Biological Product Manufacturing" },
+    ],
+    description:
+      "Swiss multinational pharmaceutical corporation researching, developing, and manufacturing a wide range of healthcare products including innovative medicines and generic drugs.",
+    business_model: ["B2B", "B2C"],
+    core_offerings: ["pharmaceuticals", "gene therapies", "biosimilars"],
+    target_markets: ["healthcare", "hospitals", "pharmacies"],
+    is_public: true,
+  },
+  {
+    operational_name: "Roche Holding AG",
+    website: "roche.com",
+    year_founded: 1896,
+    address: "Basel, Switzerland",
+    employee_count: 100000,
+    revenue: 63300000000,
+    primary_naics: {
+      code: "325412",
+      label: "Pharmaceutical Preparation Manufacturing",
+    },
+    secondary_naics: [
+      { code: "325413", label: "In-Vitro Diagnostic Substance Manufacturing" },
+    ],
+    description:
+      "Swiss healthcare company operating in pharmaceuticals and diagnostics, focused on oncology, immunology, infectious diseases, and personalized healthcare.",
+    business_model: ["B2B", "B2C"],
+    core_offerings: [
+      "pharmaceuticals",
+      "diagnostics",
+      "personalized healthcare",
+    ],
+    target_markets: ["healthcare", "hospitals", "laboratories"],
+    is_public: true,
+  },
+  {
+    operational_name: "Lonza Group",
+    website: "lonza.com",
+    year_founded: 1897,
+    address: "Basel, Switzerland",
+    employee_count: 17000,
+    revenue: 6200000000,
+    primary_naics: {
+      code: "325414",
+      label: "Biological Product Manufacturing",
+    },
+    secondary_naics: [
+      {
+        code: "325199",
+        label: "All Other Basic Organic Chemical Manufacturing",
+      },
+    ],
+    description:
+      "Swiss specialty chemicals and biotechnology company providing contract development and manufacturing services for pharmaceutical, biotech, and nutrition markets.",
+    business_model: ["B2B", "CDMO"],
+    core_offerings: [
+      "biologics manufacturing",
+      "cell therapy",
+      "small molecules",
+      "capsules",
+    ],
+    target_markets: ["pharma", "biotech", "nutrition"],
+    is_public: true,
+  },
+  {
+    operational_name: "BambooHR",
+    website: "bamboohr.com",
+    year_founded: 2008,
+    address: "Lindon, United States",
+    employee_count: 1200,
+    revenue: 250000000,
+    primary_naics: { code: "511210", label: "Software Publishers" },
+    secondary_naics: [],
+    description:
+      "Cloud-based human resources software platform for small and medium businesses providing applicant tracking, onboarding, payroll, time tracking, and performance management.",
+    business_model: ["B2B", "SaaS"],
+    core_offerings: [
+      "HR software",
+      "payroll",
+      "applicant tracking",
+      "performance management",
+    ],
+    target_markets: ["SMBs", "mid-market"],
+    is_public: false,
+  },
+  {
+    operational_name: "Personio GmbH",
+    website: "personio.de",
+    year_founded: 2015,
+    address: "Munich, Germany",
+    employee_count: 1800,
+    revenue: 200000000,
+    primary_naics: { code: "511210", label: "Software Publishers" },
+    secondary_naics: [],
+    description:
+      "European HR platform providing all-in-one human resource management software including recruiting, onboarding, payroll, and absence management for SMEs.",
+    business_model: ["B2B", "SaaS"],
+    core_offerings: [
+      "HR management",
+      "recruiting",
+      "payroll",
+      "absence management",
+    ],
+    target_markets: ["SMEs", "mid-market", "Europe"],
+    is_public: false,
+  },
+  {
+    operational_name: "Workday Inc",
+    website: "workday.com",
+    year_founded: 2005,
+    address: "Pleasanton, United States",
+    employee_count: 17000,
+    revenue: 6200000000,
+    primary_naics: { code: "511210", label: "Software Publishers" },
+    secondary_naics: [],
+    description:
+      "Enterprise cloud applications for finance and human resources providing planning, analytics, and people management solutions for large organizations.",
+    business_model: ["B2B", "SaaS"],
+    core_offerings: ["HCM", "financial management", "planning", "analytics"],
+    target_markets: ["enterprise", "large organizations"],
+    is_public: true,
+  },
+  {
+    operational_name: "Vestas Wind Systems",
+    website: "vestas.com",
+    year_founded: 1945,
+    address: "Aarhus, Denmark",
+    employee_count: 29000,
+    revenue: 15400000000,
+    primary_naics: {
+      code: "333611",
+      label: "Turbine and Turbine Generator Set Units Manufacturing",
+    },
+    secondary_naics: [
+      { code: "221115", label: "Wind Electric Power Generation" },
+    ],
+    description:
+      "Danish manufacturer and installer of wind turbines, providing wind energy solutions including design, manufacture, installation, and servicing of turbines worldwide.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "wind turbines",
+      "wind energy solutions",
+      "turbine maintenance",
+    ],
+    target_markets: ["utilities", "energy", "government"],
+    is_public: true,
+  },
+  {
+    operational_name: "Siemens Gamesa",
+    website: "siemensgamesa.com",
+    year_founded: 2017,
+    address: "Boadilla del Monte, Spain",
+    employee_count: 27000,
+    revenue: 10200000000,
+    primary_naics: {
+      code: "333611",
+      label: "Turbine and Turbine Generator Set Units Manufacturing",
+    },
+    secondary_naics: [
+      { code: "221115", label: "Wind Electric Power Generation" },
+    ],
+    description:
+      "Wind energy company manufacturing onshore and offshore wind turbines and providing comprehensive wind power plant solutions and services.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "onshore wind turbines",
+      "offshore wind turbines",
+      "wind farm services",
+    ],
+    target_markets: ["utilities", "energy developers"],
+    is_public: true,
+  },
+  {
+    operational_name: "Northvolt AB",
+    website: "northvolt.com",
+    year_founded: 2016,
+    address: "Stockholm, Sweden",
+    employee_count: 5000,
+    revenue: 200000000,
+    primary_naics: { code: "335911", label: "Storage Battery Manufacturing" },
+    secondary_naics: [
+      { code: "335912", label: "Primary Battery Manufacturing" },
+    ],
+    description:
+      "Swedish battery manufacturer designing and producing sustainable lithium-ion batteries for electric vehicles, energy storage, and industrial applications.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "lithium-ion batteries",
+      "battery recycling",
+      "energy storage systems",
+    ],
+    target_markets: ["automotive", "energy storage", "industrial"],
+    is_public: false,
+  },
+  {
+    operational_name: "CATL",
+    website: "catl.com",
+    year_founded: 2011,
+    address: "Ningde, China",
+    employee_count: 80000,
+    revenue: 45000000000,
+    primary_naics: { code: "335911", label: "Storage Battery Manufacturing" },
+    secondary_naics: [
+      { code: "335912", label: "Primary Battery Manufacturing" },
+    ],
+    description:
+      "World's largest manufacturer of lithium-ion batteries for electric vehicles and energy storage systems, leading in battery technology innovation and recycling.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "EV batteries",
+      "energy storage batteries",
+      "battery management systems",
+    ],
+    target_markets: ["automotive", "energy storage"],
+    is_public: true,
+  },
+  {
+    operational_name: "Umicore",
+    website: "umicore.com",
+    year_founded: 1805,
+    address: "Brussels, Belgium",
+    employee_count: 11000,
+    revenue: 4200000000,
+    primary_naics: {
+      code: "331419",
+      label: "Primary Smelting and Refining of Nonferrous Metal",
+    },
+    secondary_naics: [
+      { code: "335911", label: "Storage Battery Manufacturing" },
+    ],
+    description:
+      "Materials technology and recycling group specializing in cathode materials for rechargeable batteries, automotive catalysts, and precious metals recycling.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "cathode materials",
+      "automotive catalysts",
+      "precious metals recycling",
+    ],
+    target_markets: ["automotive", "electronics", "energy"],
+    is_public: true,
+  },
+  {
+    operational_name: "Albemarle Corporation",
+    website: "albemarle.com",
+    year_founded: 1887,
+    address: "Charlotte, United States",
+    employee_count: 6000,
+    revenue: 9600000000,
+    primary_naics: {
+      code: "325180",
+      label: "Other Basic Inorganic Chemical Manufacturing",
+    },
+    secondary_naics: [
+      { code: "212393", label: "Other Chemical and Fertilizer Mineral Mining" },
+    ],
+    description:
+      "Global specialty chemicals company and one of the world's largest producers of lithium for electric vehicle batteries, as well as bromine and catalysts.",
+    business_model: ["B2B"],
+    core_offerings: ["lithium", "bromine", "catalysts"],
+    target_markets: ["automotive", "energy storage", "electronics"],
+    is_public: true,
+  },
+  {
+    operational_name: "SunPower Solutions",
+    website: "sunpowersol.dk",
+    year_founded: 2019,
+    address: "Copenhagen, Denmark",
+    employee_count: 85,
+    revenue: 12000000,
+    primary_naics: {
+      code: "334413",
+      label: "Semiconductor and Related Device Manufacturing",
+    },
+    secondary_naics: [
+      { code: "221114", label: "Solar Electric Power Generation" },
+    ],
+    description:
+      "Danish clean energy startup developing next-generation photovoltaic panels and solar energy management systems for residential and commercial installations.",
+    business_model: ["B2B", "B2C"],
+    core_offerings: ["solar panels", "energy management", "solar installation"],
+    target_markets: ["residential", "commercial", "utilities"],
+    is_public: false,
+  },
+  {
+    operational_name: "GreenHydrogen AS",
+    website: "greenhydrogen.no",
+    year_founded: 2020,
+    address: "Oslo, Norway",
+    employee_count: 45,
+    revenue: 3000000,
+    primary_naics: { code: "325120", label: "Industrial Gas Manufacturing" },
+    secondary_naics: [
+      { code: "333249", label: "Other Industrial Machinery Manufacturing" },
+    ],
+    description:
+      "Norwegian startup developing electrolyzers for green hydrogen production, enabling industrial decarbonization through renewable-powered hydrogen generation.",
+    business_model: ["B2B"],
+    core_offerings: ["electrolyzers", "green hydrogen", "hydrogen storage"],
+    target_markets: ["energy", "industrial", "transportation"],
+    is_public: false,
+  },
+  {
+    operational_name: "Shopify Inc",
+    website: "shopify.com",
+    year_founded: 2006,
+    address: "Ottawa, Canada",
+    employee_count: 10000,
+    revenue: 5600000000,
+    primary_naics: { code: "511210", label: "Software Publishers" },
+    secondary_naics: [
+      {
+        code: "518210",
+        label: "Data Processing, Hosting, and Related Services",
+      },
+    ],
+    description:
+      "Commerce platform providing online store, point-of-sale, marketing, shipping, and payment solutions for businesses of all sizes.",
+    business_model: ["B2B", "SaaS", "Platform"],
+    core_offerings: [
+      "e-commerce platform",
+      "POS",
+      "payment processing",
+      "shipping",
+    ],
+    target_markets: ["SMBs", "enterprise", "retail"],
+    is_public: true,
+  },
+  {
+    operational_name: "BigCommerce",
+    website: "bigcommerce.com",
+    year_founded: 2009,
+    address: "Austin, United States",
+    employee_count: 1500,
+    revenue: 300000000,
+    primary_naics: { code: "511210", label: "Software Publishers" },
+    secondary_naics: [
+      {
+        code: "518210",
+        label: "Data Processing, Hosting, and Related Services",
+      },
+    ],
+    description:
+      "Open SaaS e-commerce platform enabling merchants to create, manage, and scale online stores with built-in features and headless commerce capabilities.",
+    business_model: ["B2B", "SaaS"],
+    core_offerings: [
+      "e-commerce platform",
+      "headless commerce",
+      "omnichannel selling",
+    ],
+    target_markets: ["mid-market", "enterprise", "retail"],
+    is_public: true,
+  },
+  {
+    operational_name: "Faire Wholesale",
+    website: "faire.com",
+    year_founded: 2017,
+    address: "San Francisco, United States",
+    employee_count: 1000,
+    revenue: 400000000,
+    primary_naics: {
+      code: "423990",
+      label: "Other Miscellaneous Durable Goods Merchant Wholesalers",
+    },
+    secondary_naics: [
+      { code: "454110", label: "Electronic Shopping and Mail-Order Houses" },
+    ],
+    description:
+      "Online wholesale marketplace connecting independent retailers with brands, offering net-60 payment terms and free returns to simplify wholesale buying.",
+    business_model: ["B2B", "Marketplace"],
+    core_offerings: [
+      "wholesale marketplace",
+      "retail buying",
+      "brand discovery",
+    ],
+    target_markets: ["independent retailers", "consumer brands"],
+    is_public: false,
+  },
+  {
+    operational_name: "Etsy Inc",
+    website: "etsy.com",
+    year_founded: 2005,
+    address: "Brooklyn, United States",
+    employee_count: 2500,
+    revenue: 2700000000,
+    primary_naics: {
+      code: "454110",
+      label: "Electronic Shopping and Mail-Order Houses",
+    },
+    secondary_naics: [],
+    description:
+      "Global online marketplace for unique, handmade, and vintage items connecting creative entrepreneurs with millions of buyers worldwide.",
+    business_model: ["B2C", "Marketplace"],
+    core_offerings: ["online marketplace", "handmade goods", "vintage items"],
+    target_markets: ["consumers", "artisans", "crafters"],
+    is_public: true,
+  },
+  {
+    operational_name: "Henkel AG",
+    website: "henkel.com",
+    year_founded: 1876,
+    address: "Düsseldorf, Germany",
+    employee_count: 50000,
+    revenue: 22400000000,
+    primary_naics: {
+      code: "325611",
+      label: "Soap and Other Detergent Manufacturing",
+    },
+    secondary_naics: [{ code: "325520", label: "Adhesive Manufacturing" }],
+    description:
+      "German multinational chemical and consumer goods company operating in adhesive technologies, beauty care, and laundry and home care.",
+    business_model: ["B2B", "B2C"],
+    core_offerings: [
+      "adhesives",
+      "beauty care",
+      "laundry products",
+      "home care",
+    ],
+    target_markets: ["industrial", "consumers", "automotive"],
+    is_public: true,
+  },
+  {
+    operational_name: "L'Oréal",
+    website: "loreal.com",
+    year_founded: 1909,
+    address: "Clichy, France",
+    employee_count: 87000,
+    revenue: 41000000000,
+    primary_naics: {
+      code: "325620",
+      label: "Toilet Preparation Manufacturing",
+    },
+    secondary_naics: [],
+    description:
+      "World's largest cosmetics and beauty company offering haircare, skincare, makeup, and fragrance products across luxury, consumer, and professional divisions.",
+    business_model: ["B2C", "B2B"],
+    core_offerings: ["cosmetics", "skincare", "haircare", "fragrance"],
+    target_markets: ["consumers", "salons", "luxury retail"],
+    is_public: true,
+  },
+  {
+    operational_name: "Nordic Solar Farms",
+    website: "nordicsolarfarms.se",
+    year_founded: 2021,
+    address: "Malmö, Sweden",
+    employee_count: 32,
+    revenue: 5000000,
+    primary_naics: { code: "221114", label: "Solar Electric Power Generation" },
+    secondary_naics: [],
+    description:
+      "Swedish clean energy startup developing and operating utility-scale solar farms across Scandinavia, focused on accelerating the Nordic energy transition.",
+    business_model: ["B2B", "B2G"],
+    core_offerings: [
+      "solar farm development",
+      "renewable energy generation",
+      "PPA contracts",
+    ],
+    target_markets: ["utilities", "municipalities", "corporates"],
+    is_public: false,
+  },
+  {
+    operational_name: "WattBridge Energy",
+    website: "wattbridge.fi",
+    year_founded: 2019,
+    address: "Helsinki, Finland",
+    employee_count: 28,
+    revenue: 2000000,
+    primary_naics: {
+      code: "335999",
+      label:
+        "All Other Miscellaneous Electrical Equipment and Component Manufacturing",
+    },
+    secondary_naics: [
+      { code: "221118", label: "Other Electric Power Generation" },
+    ],
+    description:
+      "Finnish clean energy startup building smart grid solutions and battery energy storage systems to optimize renewable energy distribution and grid stability.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "battery storage systems",
+      "smart grid solutions",
+      "energy optimization",
+    ],
+    target_markets: ["utilities", "energy", "infrastructure"],
+    is_public: false,
+  },
+  {
+    operational_name: "DHL Supply Chain",
+    website: "dhl.com",
+    year_founded: 1969,
+    address: "Bonn, Germany",
+    employee_count: 380000,
+    revenue: 81000000000,
+    primary_naics: {
+      code: "488510",
+      label: "Freight Transportation Arrangement",
+    },
+    secondary_naics: [
+      { code: "492110", label: "Couriers and Express Delivery Services" },
+    ],
+    description:
+      "Global logistics company providing warehousing, distribution, freight transportation, and supply chain management solutions worldwide.",
+    business_model: ["B2B", "B2C"],
+    core_offerings: [
+      "express delivery",
+      "freight forwarding",
+      "warehousing",
+      "supply chain management",
+    ],
+    target_markets: ["e-commerce", "manufacturing", "healthcare", "automotive"],
+    is_public: false,
+  },
+  {
+    operational_name: "FlexPackCo",
+    website: "flexpackco.com",
+    year_founded: 2005,
+    address: "Atlanta, United States",
+    employee_count: 450,
+    revenue: 85000000,
+    primary_naics: {
+      code: "326112",
+      label: "Plastics Packaging Film and Sheet Manufacturing",
+    },
+    secondary_naics: [
+      {
+        code: "322220",
+        label: "Paper Bag and Coated and Treated Paper Manufacturing",
+      },
+    ],
+    description:
+      "Specialty packaging company producing custom flexible pouches, sachets, and wrapping solutions for cosmetics, personal care, and food industries.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "flexible pouches",
+      "sachets",
+      "custom packaging",
+      "sustainable packaging",
+    ],
+    target_markets: ["cosmetics", "personal care", "food"],
+    is_public: false,
+  },
+  {
+    operational_name: "Skanska AB",
+    website: "skanska.com",
+    year_founded: 1887,
+    address: "Stockholm, Sweden",
+    employee_count: 28000,
+    revenue: 18000000000,
+    primary_naics: {
+      code: "236220",
+      label: "Commercial and Institutional Building Construction",
+    },
+    secondary_naics: [
+      { code: "237310", label: "Highway, Street, and Bridge Construction" },
+    ],
+    description:
+      "Swedish multinational construction and development company active in building construction, civil engineering, and residential and commercial property development.",
+    business_model: ["B2B", "B2G"],
+    core_offerings: [
+      "building construction",
+      "civil engineering",
+      "property development",
+    ],
+    target_markets: ["commercial", "residential", "infrastructure"],
+    is_public: true,
+  },
+  {
+    operational_name: "Mondi Group",
+    website: "mondi.com",
+    year_founded: 1967,
+    address: "Vienna, Austria",
+    employee_count: 22000,
+    revenue: 8900000000,
+    primary_naics: { code: "322130", label: "Paperboard Mills" },
+    secondary_naics: [
+      { code: "322211", label: "Corrugated and Solid Fiber Box Manufacturing" },
+    ],
+    description:
+      "Global packaging and paper group producing sustainable packaging and paper solutions for consumer goods, e-commerce, and industrial applications.",
+    business_model: ["B2B"],
+    core_offerings: [
+      "corrugated packaging",
+      "flexible packaging",
+      "uncoated fine paper",
+    ],
+    target_markets: ["consumer goods", "e-commerce", "industrial"],
+    is_public: true,
+  },
+];
 
-// Convert API intent object → format expected by ParsedPanel
-function adaptIntent(intent) {
-  const criteria = intent.criteria || [];
-  const q = (intent.semantic_query || intent.original_query || "").toLowerCase();
+// ─── QUERY PARSER ───────────────────────────────────────────────────────────
+const COUNTRY_MAP = {
+  romania: ["romania", "romanian", "bucharest", "cluj", "timisoara", ".ro"],
+  germany: [
+    "germany",
+    "german",
+    "berlin",
+    "munich",
+    "hamburg",
+    "frankfurt",
+    ".de",
+  ],
+  france: ["france", "french", "paris", "lyon", "marseille", ".fr"],
+  "united states": [
+    "united states",
+    "usa",
+    "us",
+    "american",
+    "new york",
+    "california",
+    "texas",
+    "chicago",
+    "boston",
+    "atlanta",
+    "san francisco",
+    "charlotte",
+    "omaha",
+    "reston",
+    "pleasanton",
+    "lindon",
+    "austin",
+    "brooklyn",
+  ],
+  switzerland: ["switzerland", "swiss", "zurich", "basel", "geneva", ".ch"],
+  "united kingdom": [
+    "uk",
+    "united kingdom",
+    "british",
+    "london",
+    "england",
+    ".co.uk",
+  ],
+  sweden: ["sweden", "swedish", "stockholm", "malmö", ".se"],
+  denmark: ["denmark", "danish", "aarhus", "copenhagen", ".dk"],
+  norway: ["norway", "norwegian", "oslo", ".no"],
+  finland: ["finland", "finnish", "helsinki", ".fi"],
+  china: ["china", "chinese", "ningde"],
+  belgium: ["belgium", "belgian", "brussels", ".be"],
+  austria: ["austria", "austrian", "vienna", ".at"],
+  spain: ["spain", "spanish", "madrid", "barcelona", ".es"],
+  canada: ["canada", "canadian", "ottawa", ".ca"],
+};
+const REGION_MAP = {
+  europe: [
+    "germany",
+    "france",
+    "united kingdom",
+    "switzerland",
+    "sweden",
+    "denmark",
+    "norway",
+    "finland",
+    "belgium",
+    "austria",
+    "spain",
+    "romania",
+  ],
+  scandinavia: ["sweden", "denmark", "norway", "finland"],
+  nordic: ["sweden", "denmark", "norway", "finland"],
+};
+const INDUSTRY_DEFS = {
+  logistics: {
+    naics: ["484", "488", "492", "493"],
+    terms: [
+      "logistics",
+      "freight",
+      "shipping",
+      "trucking",
+      "courier",
+      "delivery",
+      "warehousing",
+      "supply chain",
+      "transportation",
+    ],
+  },
+  software: {
+    naics: ["5112"],
+    terms: ["software", "saas", "cloud", "platform", "app", "application"],
+  },
+  food_beverage: {
+    naics: ["311", "312"],
+    terms: [
+      "food",
+      "beverage",
+      "dairy",
+      "cheese",
+      "milk",
+      "spirits",
+      "wine",
+      "beer",
+      "distill",
+      "manufacturing",
+    ],
+  },
+  packaging: {
+    naics: ["3221", "3261", "3272"],
+    terms: [
+      "packaging",
+      "package",
+      "container",
+      "bottle",
+      "pouch",
+      "wrap",
+      "box",
+      "carton",
+      "film",
+    ],
+  },
+  construction: {
+    naics: ["236", "237"],
+    terms: [
+      "construction",
+      "building",
+      "contracting",
+      "civil engineering",
+      "infrastructure",
+    ],
+  },
+  pharmaceutical: {
+    naics: ["3254"],
+    terms: [
+      "pharmaceutical",
+      "pharma",
+      "drug",
+      "medicine",
+      "biotech",
+      "biolog",
+    ],
+  },
+  hr_solutions: {
+    naics: ["5112"],
+    terms: [
+      "hr",
+      "human resource",
+      "recruiting",
+      "payroll",
+      "onboarding",
+      "talent",
+      "workforce",
+      "people management",
+      "hcm",
+    ],
+  },
+  clean_energy: {
+    naics: ["2211", "3334", "3359"],
+    terms: [
+      "clean energy",
+      "renewable",
+      "solar",
+      "wind",
+      "hydrogen",
+      "green energy",
+      "battery storage",
+      "smart grid",
+    ],
+  },
+  fintech: {
+    naics: ["5223", "5221"],
+    terms: [
+      "fintech",
+      "banking",
+      "payment",
+      "financial",
+      "neobank",
+      "digital bank",
+      "buy now pay later",
+      "money transfer",
+    ],
+  },
+  ecommerce: {
+    naics: ["4541", "5112"],
+    terms: [
+      "e-commerce",
+      "ecommerce",
+      "online store",
+      "marketplace",
+      "shopify",
+      "online shopping",
+    ],
+  },
+  renewable_equipment: {
+    naics: ["3336", "3359", "3354"],
+    terms: [
+      "turbine",
+      "solar panel",
+      "wind turbine",
+      "electrolyzer",
+      "renewable equipment",
+      "photovoltaic",
+    ],
+  },
+  ev_battery: {
+    naics: ["3359", "3314", "3251"],
+    terms: [
+      "battery",
+      "lithium",
+      "cathode",
+      "anode",
+      "ev battery",
+      "electric vehicle",
+      "energy storage",
+      "battery recycling",
+    ],
+  },
+  cosmetics: {
+    naics: ["3256"],
+    terms: [
+      "cosmetics",
+      "beauty",
+      "skincare",
+      "makeup",
+      "personal care",
+      "fragrance",
+    ],
+  },
+};
+
+function parseQuery(query) {
+  const q = query.toLowerCase();
+  let countries = [];
+  let regionMatch = null;
+  for (const [region, rc] of Object.entries(REGION_MAP)) {
+    if (q.includes(region)) {
+      countries = rc;
+      regionMatch = region;
+      break;
+    }
+  }
+  if (!countries.length) {
+    for (const [country, pats] of Object.entries(COUNTRY_MAP)) {
+      if (pats.some((p) => q.includes(p))) countries.push(country);
+    }
+  }
+  const extractNum = (regex) => {
+    const m = q.match(regex);
+    return m ? parseInt(m[1].replace(/,/g, "")) : null;
+  };
+  const employeeMin =
+    extractNum(/more than ([\d,]+) employees/i) ||
+    extractNum(/over ([\d,]+) employees/i) ||
+    extractNum(/(\d[\d,]*)\+ employees/i);
+  const employeeMax =
+    extractNum(/fewer than ([\d,]+) employees/i) ||
+    extractNum(/under ([\d,]+) employees/i) ||
+    extractNum(/less than ([\d,]+) employees/i);
+  const yearMin = extractNum(/(?:founded|started) after (\d{4})/i);
+  let revenueMin = null;
+  const rm = q.match(
+    /revenue (?:over|above|more than|exceeding) \$?([\d.]+)\s*(million|billion|m|b)?/i,
+  );
+  if (rm) {
+    let v = parseFloat(rm[1]);
+    const u = (rm[2] || "").toLowerCase();
+    if (u.startsWith("b")) v *= 1e9;
+    else if (u.startsWith("m") || u === "million") v *= 1e6;
+    else if (v < 1000) v *= 1e6;
+    revenueMin = v;
+  }
+  let isPublic = null;
+  if (
+    q.includes("public compan") ||
+    q.includes("publicly traded") ||
+    q.match(/\bpublic\b.*\bcompan/)
+  )
+    isPublic = true;
+  let industries = [];
+  for (const [key, ind] of Object.entries(INDUSTRY_DEFS)) {
+    const score = ind.terms.reduce((s, t) => s + (q.includes(t) ? 1 : 0), 0);
+    if (score > 0) industries.push({ key, score, ...ind });
+  }
+  industries.sort((a, b) => b.score - a.score);
+  industries = industries.slice(0, 3);
+  const businessModels = [];
+  if (q.includes("b2b")) businessModels.push("B2B");
+  if (q.includes("b2c")) businessModels.push("B2C");
+  if (q.includes("saas")) businessModels.push("SaaS");
+  const isSupplyChain =
+    q.includes("supply") ||
+    q.includes("supplier") ||
+    q.includes("component") ||
+    q.includes("critical");
+  const isEcosystem =
+    q.includes("competing") ||
+    q.includes("alternative") ||
+    q.includes("similar");
+  const isStartup = q.includes("startup") || q.includes("start-up");
+  const isFastGrowing =
+    q.includes("fast-growing") || q.includes("fast growing");
+  let complexity = 1;
+  if (industries.length > 1) complexity += 1;
+  if (isSupplyChain || isEcosystem) complexity += 2;
+  if (employeeMin || employeeMax || revenueMin || yearMin || isPublic !== null)
+    complexity -= 0.5;
+  complexity = Math.max(1, Math.min(5, Math.round(complexity)));
   return {
-    countries: intent.countries || [],
-    regionMatch: null,
-    industries: [],
-    employeeMin: intent.min_employees || null,
-    employeeMax: intent.max_employees || null,
-    revenueMin: intent.min_revenue || null,
-    yearMin: intent.min_year_founded || null,
-    isPublic: intent.is_public ?? null,
-    businessModels: intent.business_models || [],
-    isSupplyChain: criteria.some((c) => /supply|component|packaging|material/i.test(c)),
-    isEcosystem: criteria.some((c) => /compet|alternat|similar/i.test(c)),
-    isStartup: criteria.some((c) => /startup|start.?up/i.test(c)),
-    isFastGrowing: criteria.some((c) => /fast.?grow|rapid/i.test(c)),
-    complexity: Math.min(5, Math.max(1, Math.round(criteria.length / 2) || 1)),
+    raw: query,
+    countries,
+    regionMatch,
+    industries,
+    employeeMin,
+    employeeMax,
+    revenueMin,
+    yearMin,
+    isPublic,
+    businessModels,
+    isSupplyChain,
+    isEcosystem,
+    isStartup,
+    isFastGrowing,
+    complexity,
   };
 }
 
-// Convert API company object → format expected by CompanyCard
-function adaptCompany(c) {
-  const addr = c.address;
-  const addrStr =
-    addr && typeof addr === "object"
-      ? [addr.town, addr.country_code?.toUpperCase()].filter(Boolean).join(", ")
-      : addr || "";
-
-  const score = Math.round((c.final_score || 0) * 100);
-  const qualified = c.llm_score > 0 || score >= 25;
-
-  const signals = [];
-  if (c.llm_score > 0)
-    signals.push({ label: `AI: ${c.llm_score} criteria matched`, pts: c.llm_score * 10 });
-  if (c.embedding_score > 0.5)
-    signals.push({ label: "Strong semantic match", pts: Math.round(c.embedding_score * 10) });
-  if (c.match_reasons)
-    signals.push({ label: c.match_reasons, pts: 0 });
-
-  return { ...c, address: addrStr, score, qualified, signals };
+// ─── SCORER ─────────────────────────────────────────────────────────────────
+function detectCountry(c) {
+  const a = (c.address || "").toLowerCase();
+  const w = (c.website || "").toLowerCase();
+  for (const [country, pats] of Object.entries(COUNTRY_MAP)) {
+    if (pats.some((p) => a.includes(p) || w.endsWith(p))) return country;
+  }
+  return null;
+}
+function matchNaics(c, prefixes) {
+  const codes = [
+    c.primary_naics?.code,
+    ...(c.secondary_naics || []).map((n) => n.code),
+  ].filter(Boolean);
+  return prefixes.some((p) => codes.some((cc) => cc.startsWith(p)));
+}
+function textHits(c, terms) {
+  const blob = [
+    c.description || "",
+    c.operational_name || "",
+    (c.core_offerings || []).join(" "),
+    (c.target_markets || []).join(" "),
+    c.primary_naics?.label || "",
+    ...(c.secondary_naics || []).map((n) => n.label || ""),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return terms.reduce((s, t) => s + (blob.includes(t) ? 1 : 0), 0);
 }
 
-// ─── (old frontend data/logic removed — all qualification done by backend) ───
+function scoreCompanies(companies, parsed) {
+  return companies
+    .map((company) => {
+      let score = 0,
+        maxScore = 0;
+      const signals = [];
+      if (parsed.countries.length) {
+        maxScore += 30;
+        const cc = detectCountry(company);
+        if (cc && parsed.countries.includes(cc)) {
+          score += 30;
+          signals.push({ label: "Country match", pts: 30 });
+        }
+      }
+      if (parsed.industries.length) {
+        maxScore += 35;
+        const top = parsed.industries[0];
+        if (matchNaics(company, top.naics)) {
+          score += 20;
+          signals.push({
+            label: `NAICS: ${top.key.replace(/_/g, " ")}`,
+            pts: 20,
+          });
+        }
+        const kw = textHits(company, top.terms);
+        if (kw > 0) {
+          const p = Math.round(15 * Math.min(1, kw / (top.terms.length * 0.3)));
+          score += p;
+          signals.push({
+            label: `Keywords (${kw}/${top.terms.length})`,
+            pts: p,
+          });
+        }
+        for (let i = 1; i < parsed.industries.length; i++) {
+          const ind = parsed.industries[i];
+          if (
+            matchNaics(company, ind.naics) ||
+            textHits(company, ind.terms) > 1
+          ) {
+            score += 5;
+            signals.push({
+              label: `Secondary: ${ind.key.replace(/_/g, " ")}`,
+              pts: 5,
+            });
+          }
+        }
+      }
+      if (parsed.employeeMin !== null) {
+        maxScore += 10;
+        if (
+          company.employee_count &&
+          company.employee_count > parsed.employeeMin
+        ) {
+          score += 10;
+          signals.push({
+            label: `Employees > ${parsed.employeeMin.toLocaleString()}`,
+            pts: 10,
+          });
+        }
+      }
+      if (parsed.employeeMax !== null) {
+        maxScore += 10;
+        if (
+          company.employee_count &&
+          company.employee_count < parsed.employeeMax
+        ) {
+          score += 10;
+          signals.push({
+            label: `Employees < ${parsed.employeeMax.toLocaleString()}`,
+            pts: 10,
+          });
+        } else if (!company.employee_count) {
+          score += 3;
+          signals.push({ label: "Employees unknown", pts: 3 });
+        }
+      }
+      if (parsed.revenueMin !== null) {
+        maxScore += 10;
+        if (company.revenue && company.revenue > parsed.revenueMin) {
+          score += 10;
+          signals.push({
+            label: `Revenue > $${(parsed.revenueMin / 1e6).toFixed(0)}M`,
+            pts: 10,
+          });
+        }
+      }
+      if (parsed.yearMin !== null) {
+        maxScore += 10;
+        if (company.year_founded && company.year_founded > parsed.yearMin) {
+          score += 10;
+          signals.push({ label: `Founded after ${parsed.yearMin}`, pts: 10 });
+        }
+      }
+      if (parsed.isPublic !== null) {
+        maxScore += 10;
+        if (company.is_public === parsed.isPublic) {
+          score += 10;
+          signals.push({
+            label: parsed.isPublic ? "Publicly traded" : "Private",
+            pts: 10,
+          });
+        }
+      }
+      if (parsed.businessModels.length) {
+        maxScore += 10;
+        const bm = (company.business_model || []).map((b) => b.toLowerCase());
+        const mc = parsed.businessModels.filter((m) =>
+          bm.includes(m.toLowerCase()),
+        ).length;
+        if (mc) {
+          const p = Math.round((10 * mc) / parsed.businessModels.length);
+          score += p;
+          signals.push({ label: "Business model match", pts: p });
+        }
+      }
+      if (parsed.isSupplyChain) {
+        maxScore += 15;
+        const bm = (company.business_model || []).map((b) => b.toLowerCase());
+        if (bm.includes("b2b")) {
+          score += 5;
+          signals.push({ label: "B2B supplier role", pts: 5 });
+        }
+        const tgt = (company.target_markets || []).map((t) => t.toLowerCase());
+        const related = {
+          cosmetics: ["beauty", "cosmetics", "personal care"],
+          ev_battery: ["automotive", "energy storage", "electronics"],
+        };
+        if (
+          parsed.industries.some((ind) =>
+            (related[ind.key] || []).some((r) => tgt.includes(r)),
+          )
+        ) {
+          score += 10;
+          signals.push({ label: "Serves target industry", pts: 10 });
+        }
+      }
+      if (parsed.isStartup) {
+        maxScore += 5;
+        if (
+          company.employee_count &&
+          company.employee_count < 500 &&
+          company.year_founded &&
+          company.year_founded > 2010
+        ) {
+          score += 5;
+          signals.push({ label: "Startup profile", pts: 5 });
+        }
+      }
+      const pct = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
+      return {
+        ...company,
+        score: pct,
+        rawScore: score,
+        maxScore,
+        signals,
+        qualified: pct >= 50,
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+}
 
 // ─── PRESET QUERIES ─────────────────────────────────────────────────────────
 const PRESETS = [
@@ -416,43 +1857,34 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [tab, setTab] = useState("qualified");
-  const [time, setTime] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [totalCompanies, setTotalCompanies] = useState(477);
   const inputRef = useRef(null);
 
-  const run = useCallback(async (q) => {
-    setLoading(true);
+  const run = useCallback((q) => {
     const t0 = performance.now();
-    try {
-      const res = await fetch(`${API_BASE}/qualify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, top_n: 50 }),
-      });
-      const data = await res.json();
-      const elapsed = Math.round(performance.now() - t0);
-      const scored = (data.results || []).map(adaptCompany);
-      const parsed = adaptIntent(data.intent || {});
-      setTotalCompanies(data.total_candidates || 477);
-      setResults({ query: q, parsed, scored, time: elapsed });
-      setTab("qualified");
-      setTime(elapsed);
-    } catch (err) {
-      console.error("API error:", err);
-    } finally {
-      setLoading(false);
-    }
+    const parsed = parseQuery(q);
+    const scored = scoreCompanies(COMPANIES, parsed);
+    const elapsed = Math.round(performance.now() - t0);
+    setResults({ query: q, parsed, scored, time: elapsed });
+    setTab("qualified");
   }, []);
 
   const handleSubmit = (e) => {
     e?.preventDefault();
-    if (query.trim() && !loading) run(query.trim());
+    if (query.trim()) run(query.trim());
   };
 
   const qualified = results?.scored?.filter((r) => r.qualified) || [];
   const rejected = results?.scored?.filter((r) => !r.qualified) || [];
   const displayed = tab === "qualified" ? qualified : rejected;
+
+  const countryCount = useMemo(() => {
+    const s = new Set();
+    COMPANIES.forEach((c) => {
+      const p = (c.address || "").split(",").pop()?.trim();
+      if (p) s.add(p);
+    });
+    return s.size;
+  }, []);
 
   return (
     <>
@@ -543,9 +1975,15 @@ export default function App() {
           >
             <span>
               <span style={{ color: "#e8eaf0", fontWeight: 500 }}>
-                {totalCompanies}
+                {COMPANIES.length}
               </span>{" "}
               companies
+            </span>
+            <span>
+              <span style={{ color: "#e8eaf0", fontWeight: 500 }}>
+                {countryCount}
+              </span>{" "}
+              countries
             </span>
           </div>
         </header>
@@ -576,25 +2014,23 @@ export default function App() {
             />
             <button
               type="submit"
-              disabled={!query.trim() || loading}
+              disabled={!query.trim()}
               style={{
-                background: loading
-                  ? "#1a1d26"
-                  : "linear-gradient(135deg,#00e5a0,#00b37d)",
-                color: loading ? "#00e5a0" : "#0a0b0f",
-                border: loading ? "1px solid #00e5a0" : "none",
+                background: "linear-gradient(135deg,#00e5a0,#00b37d)",
+                color: "#0a0b0f",
+                border: "none",
                 borderRadius: 10,
                 padding: "13px 26px",
                 fontFamily: '"Outfit",sans-serif',
                 fontSize: "0.9rem",
                 fontWeight: 600,
-                cursor: query.trim() && !loading ? "pointer" : "not-allowed",
-                opacity: query.trim() && !loading ? 1 : 0.7,
-                transition: "all 0.2s",
+                cursor: query.trim() ? "pointer" : "not-allowed",
+                opacity: query.trim() ? 1 : 0.4,
+                transition: "opacity 0.2s",
                 whiteSpace: "nowrap",
               }}
             >
-              {loading ? "Qualifying…" : "Qualify"}
+              Qualify
             </button>
           </form>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -726,11 +2162,10 @@ export default function App() {
                     fontSize: "0.85rem",
                     fontWeight: 500,
                     color: tab === t ? "#00e5a0" : "#5a5f70",
+                    border: "none",
                     borderBottom:
                       tab === t ? "2px solid #00e5a0" : "2px solid transparent",
                     background: "none",
-                    border: "none",
-                    borderBottomStyle: "solid",
                     fontFamily: '"Outfit",sans-serif',
                   }}
                 >
