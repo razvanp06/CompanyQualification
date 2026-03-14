@@ -112,10 +112,14 @@ Companies to evaluate:
     # Extract JSON array even if wrapped in markdown
     match = re.search(r"\[.*\]", raw, re.DOTALL)
     if not match:
-        # Fallback: all zeros
+        print(f"[Filter 3] WARNING: no JSON array in response, skipping batch")
         return [{"id": i, "scores": {}, "total": 0, "reason": "parse error"} for i in range(len(batch_rows))]
 
-    return json.loads(match.group())
+    try:
+        return json.loads(match.group())
+    except json.JSONDecodeError as e:
+        print(f"[Filter 3] WARNING: JSON decode error: {e}, skipping batch")
+        return [{"id": i, "scores": {}, "total": 0, "reason": "parse error"} for i in range(len(batch_rows))]
 
 
 def llm_rerank(df: pd.DataFrame, intent: dict) -> pd.DataFrame:

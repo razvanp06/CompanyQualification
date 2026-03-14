@@ -11,6 +11,7 @@ import sys
 import os
 import math
 import json
+import traceback
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI, HTTPException
@@ -63,6 +64,7 @@ def qualify_endpoint(req: QueryRequest):
         result = qualify(req.query, top_n=req.top_n)
         return JSONResponse(content=_nan_safe(result))
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
