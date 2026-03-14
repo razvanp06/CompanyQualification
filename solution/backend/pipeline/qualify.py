@@ -97,11 +97,7 @@ def qualify(query: str, top_n: int = FINAL_TOP_N) -> dict:
     # ── Final ranking: 40% semantic similarity + 60% LLM criteria score ──────
     # This prevents the binary 100/0 problem: even when rag_score clusters
     # companies into a few tiers, embedding_score creates a smooth gradient.
-    max_rag = reranked["rag_score"].max() or 1
-    reranked["final_score"] = (
-        0.4 * reranked["embedding_score"]
-        + 0.6 * (reranked["rag_score"] / max_rag)
-    )
+    reranked["final_score"] = reranked["embedding_score"]
     reranked = reranked.sort_values("final_score", ascending=False)
 
     # Respect result_count from intent if specified
