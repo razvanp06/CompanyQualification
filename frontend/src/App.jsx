@@ -40,7 +40,8 @@ function adaptCompany(c) {
       : addr || "";
 
   const score = Math.round((c.final_score || 0) * 100);
-  const qualified = c.llm_score > 0 || score >= 25;
+  // Backend already filtered — top 20 by rank are qualified, rest are borderline
+  const qualified = c.rank <= 20;
 
   const signals = [];
   if (c.llm_score > 0)
