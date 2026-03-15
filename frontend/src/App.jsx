@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 
 // ─── BACKEND CONNECTION ──────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8000";
+const API_BASE = "https://company-qualification-backend.onrender.com";
 
 // Convert API intent object → format expected by ParsedPanel
 function adaptIntent(intent) {
