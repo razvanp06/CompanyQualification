@@ -9,6 +9,26 @@ import re
 from typing import Optional
 
 
+# Obsolete / non-existent countries → helpful message
+_OBSOLETE_COUNTRIES = {
+    "yugoslavia":       "Yugoslavia dissolved in 1991. Its successor states are Slovenia, Croatia, Bosnia & Herzegovina, Serbia, Montenegro, and North Macedonia.",
+    "ussr":             "The USSR dissolved in 1991. Try searching by a specific country: Russia, Ukraine, Belarus, Georgia, etc.",
+    "soviet union":     "The Soviet Union dissolved in 1991. Try searching by a specific country: Russia, Ukraine, Belarus, etc.",
+    "czechoslovakia":   "Czechoslovakia split in 1993 into two countries: Czechia (Czech Republic) and Slovakia.",
+    "east germany":     "East Germany reunified with West Germany in 1990. Try searching for 'Germany'.",
+    "west germany":     "West Germany reunified with East Germany in 1990. Try searching for 'Germany'.",
+    "burma":            "Burma is now officially called Myanmar.",
+    "rhodesia":         "Rhodesia is now Zimbabwe.",
+    "zaire":            "Zaire is now the Democratic Republic of the Congo.",
+    "siam":             "Siam is now Thailand.",
+    "persia":           "Persia is now Iran.",
+    "ceylon":           "Ceylon is now Sri Lanka.",
+    "south vietnam":    "South Vietnam no longer exists as a separate country. Try searching for 'Vietnam'.",
+    "north vietnam":    "North Vietnam no longer exists as a separate country. Try searching for 'Vietnam'.",
+    "prussia":          "Prussia no longer exists. Its territory is largely in modern Germany and Poland.",
+    "ottoman empire":   "The Ottoman Empire dissolved in 1922. Its territory spans modern Turkey, and parts of the Middle East and Balkans.",
+}
+
 # Country name → ISO-2 (Romanian + English)
 _COUNTRY_MAP = {
     # English
@@ -73,11 +93,69 @@ _COUNTRY_MAP = {
 _MULTI_WORD_COUNTRIES = {k: v for k, v in _COUNTRY_MAP.items() if " " in k}
 _SINGLE_WORD_COUNTRIES = {k: v for k, v in _COUNTRY_MAP.items() if " " not in k}
 
+# City name (lowercase / diacritic variants) → normalized form as stored in DB
+_CITY_MAP = {
+    # Romania
+    "bucharest": "Bucharest", "bucurești": "Bucharest", "bucuresti": "Bucharest",
+    "constanta": "Constanța", "constanța": "Constanța",
+    "oradea": "Oradea",
+    "medias": "Mediaș", "mediaș": "Mediaș",
+    "voluntari": "Voluntari",
+    "dragomiresti": "Dragomirești-Vale", "dragomirești": "Dragomirești-Vale",
+    "cluj": "Cluj-Napoca", "cluj-napoca": "Cluj-Napoca",
+    "timisoara": "Timișoara", "timișoara": "Timișoara",
+    "iasi": "Iași", "iași": "Iași",
+    "brasov": "Brașov", "brașov": "Brașov",
+    "galati": "Galați", "galați": "Galați",
+    "ploiesti": "Ploiești", "ploiești": "Ploiești",
+    "sibiu": "Sibiu",
+    "craiova": "Craiova",
+    # Key international cities present in dataset
+    "london": "London",
+    "paris": "Paris",
+    "san francisco": "San Francisco",
+    "oslo": "Oslo",
+    "aarhus": "Aarhus",
+    "basel": "Basel",
+    "barcelona": "Barcelona",
+    "toronto": "Toronto",
+    "new york": "New York",
+    "zurich": "Zurich", "zürich": "Zurich",
+    "amsterdam": "Amsterdam",
+    "madrid": "Madrid",
+    "berlin": "Berlin",
+    "munich": "Munich",
+    "frankfurt": "Frankfurt",
+    "stockholm": "Stockholm",
+    "helsinki": "Helsinki",
+    "copenhagen": "Copenhagen",
+    "vienna": "Vienna",
+    "warsaw": "Warsaw",
+    "brussels": "Brussels",
+    "singapore": "Singapore",
+    "dubai": "Dubai",
+    "tokyo": "Tokyo",
+    "beijing": "Beijing",
+    "shanghai": "Shanghai",
+    "sydney": "Sydney",
+    "melbourne": "Melbourne",
+}
+
 # Region expansions
 _REGIONS = {
     "scandinavia": ["se", "no", "dk"],
     "scandinavian": ["se", "no", "dk"],
     "nordic": ["se", "no", "dk", "fi"],
+    "eastern europe": ["ro", "pl", "cz", "sk", "hu", "bg", "hr", "si", "rs", "md", "ua", "lt", "lv", "ee"],
+    "eastern european": ["ro", "pl", "cz", "sk", "hu", "bg", "hr", "si", "rs", "md", "ua", "lt", "lv", "ee"],
+    "central europe": ["pl", "cz", "sk", "hu", "at", "de", "ch"],
+    "central european": ["pl", "cz", "sk", "hu", "at", "de", "ch"],
+    "western europe": ["fr", "de", "nl", "be", "at", "ch", "ie", "pt", "es"],
+    "western european": ["fr", "de", "nl", "be", "at", "ch", "ie", "pt", "es"],
+    "southern europe": ["es", "pt", "it", "gr", "hr"],
+    "southern european": ["es", "pt", "it", "gr", "hr"],
+    "baltics": ["lt", "lv", "ee"],
+    "baltic": ["lt", "lv", "ee"],
     "europa": None,  # too broad → no country filter
     "europe": None,
 }
@@ -130,6 +208,13 @@ def extract_intent(query: str) -> dict:
     if m:
         result_count = int(m.group(1))
 
+    # ── obsolete / invalid country detection ─────────────────────────────────
+    location_warning: str | None = None
+    for name, message in _OBSOLETE_COUNTRIES.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", q):
+            location_warning = message
+            break
+
     # ── countries ────────────────────────────────────────────────────────────
     countries: list[str] = []
 
@@ -150,6 +235,23 @@ def extract_intent(query: str) -> dict:
 
     countries = list(dict.fromkeys(countries)) or None  # deduplicate; None if empty
 
+    # ── towns (city-level filter) ─────────────────────────────────────────────
+    towns: list[str] = []
+
+    # Check multi-word cities first to avoid partial matches
+    _multi_word_cities = {k: v for k, v in _CITY_MAP.items() if " " in k}
+    _single_word_cities = {k: v for k, v in _CITY_MAP.items() if " " not in k}
+
+    for name, normalized in _multi_word_cities.items():
+        if name in q:
+            towns.append(normalized)
+
+    for name, normalized in _single_word_cities.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", q):
+            towns.append(normalized)
+
+    towns = list(dict.fromkeys(towns)) or None  # deduplicate; None if empty
+
     # ── employees ────────────────────────────────────────────────────────────
     min_employees = None
     max_employees = None
@@ -163,7 +265,7 @@ def extract_intent(query: str) -> dict:
         min_employees = int(_parse_number(m.group(1)) or 0)
 
     m = re.search(
-        r"(?:less than|under|at most|below|sub|maxim|cel mult|maximum)\s+"
+        r"(?:fewer than|less than|under|at most|below|no more than|sub|maxim|cel mult|maximum)\s+"
         r"(" + _NUM + r")\s*(?:employee|angajat|person|people|staff|salariat)",
         q,
     )
@@ -179,13 +281,23 @@ def extract_intent(query: str) -> dict:
         min_employees = int(_parse_number(m.group(1)) or 0)
         max_employees = int(_parse_number(m.group(2)) or 0)
 
+    # "X to Y employees" / "with X to Y employees" (generated by wizard)
+    if min_employees is None and max_employees is None:
+        m = re.search(
+            r"(\d[\d,]*)\s+to\s+(\d[\d,]*)\s*(?:employee|angajat|person|people|staff)",
+            q,
+        )
+        if m:
+            min_employees = int(_parse_number(m.group(1)) or 0)
+            max_employees = int(_parse_number(m.group(2)) or 0)
+
     # ── revenue ──────────────────────────────────────────────────────────────
     min_revenue = None
     max_revenue = None
 
     _rev_word = r"(?:revenue|sales|turnover|venituri|cifra de afaceri)"
     _above = r"(?:over|more than|above|at least|peste|de peste|minim|minimum|of at least)"
-    _below = r"(?:under|less than|below|at most|sub|maxim|maximum)"
+    _below = r"(?:under|fewer than|less than|below|at most|no more than|sub|maxim|maximum)"
 
     m = re.search(rf"{_rev_word}\s+{_above}\s+\$?({_NUM})", q)
     if not m:
@@ -235,7 +347,9 @@ def extract_intent(query: str) -> dict:
 
     # ── criteria (for LLM scoring in Filter 2) ───────────────────────────────
     criteria = []
-    if countries:
+    if towns:
+        criteria.append(f"company is located in the city of: {', '.join(towns)}")
+    elif countries:
         criteria.append(f"company is based in or operates in: {', '.join(countries)}")
     if min_employees:
         criteria.append(f"has more than {min_employees} employees")
@@ -253,34 +367,34 @@ def extract_intent(query: str) -> dict:
         criteria.append("is a publicly listed company")
     elif is_public is False:
         criteria.append("is a private company")
-    if business_models:
-        criteria.append(f"uses business model: {', '.join(business_models)}")
     # Industry-specific criteria — these give the LLM precise language instead of
     # vague "relevant to query", preventing energy/chemical companies being confused
     # with pharmaceutical/logistics etc.
     _INDUSTRY_HINTS = {
         ("pharmaceutical", "pharma", "drug", "medicine", "medicament"):
-            "primary business is pharmaceutical manufacturing, drug distribution, or medicine retail (NOT generic chemicals or consumer goods)",
+            ("Pharmaceutical", "primary business is pharmaceutical manufacturing, drug distribution, or medicine retail (NOT generic chemicals or consumer goods)"),
         ("logistics", "transport", "freight", "shipping", "courier", "trucking", "warehousing", "supply chain"):
-            "primary business is freight, trucking, warehousing, courier, rail/road/sea transport, or supply chain (NOT energy/gas/oil distribution)",
+            ("Logistics", "primary business is freight, trucking, warehousing, courier, rail/road/sea transport, or supply chain (NOT energy/gas/oil distribution)"),
         ("software", "saas", "tech", "technology", "it ", "information technology"):
-            "primary business is software development, SaaS products, or IT services",
+            ("IT / Software", "primary business is software development, SaaS products, or IT services"),
         ("manufacturing", "production", "factory"):
-            "primary business is physical goods manufacturing or production",
+            ("Manufacturing", "primary business is physical goods manufacturing or production"),
         ("retail", "e-commerce", "ecommerce", "shop", "store"):
-            "primary business is retail or e-commerce sales to end consumers",
+            ("Retail / E-commerce", "sells products to consumers online or in physical stores — e-commerce, retail, or omnichannel. Score high if the company has a significant online sales channel even if not exclusively e-commerce"),
         ("finance", "banking", "insurance", "fintech"):
-            "primary business is financial services, banking, insurance, or fintech",
+            ("Finance / Fintech", "primary business is financial services, banking, insurance, or fintech"),
         ("energy", "oil", "gas", "renewable", "solar", "wind", "electricity"):
-            "primary business is energy production, oil/gas extraction, or renewable energy",
+            ("Energy", "primary business is energy production, oil/gas extraction, or renewable energy"),
         ("food", "beverage", "restaurant", "catering"):
-            "primary business is food/beverage manufacturing, distribution, or food service",
+            ("Food & Beverage", "primary business is food/beverage manufacturing, distribution, or food service"),
         ("real estate", "property", "construction"):
-            "primary business is real estate, property development, or construction",
+            ("Real Estate / Construction", "primary business is real estate, property development, or construction"),
     }
+    industry_label = None
     industry_hint = None
-    for keywords, hint in _INDUSTRY_HINTS.items():
+    for keywords, (label, hint) in _INDUSTRY_HINTS.items():
         if any(kw in q for kw in keywords):
+            industry_label = label
             industry_hint = hint
             break
     if industry_hint:
@@ -291,6 +405,7 @@ def extract_intent(query: str) -> dict:
     return {
         "result_count": result_count,
         "countries": countries,
+        "towns": towns,
         "min_employees": min_employees,
         "max_employees": max_employees,
         "min_revenue": min_revenue,
@@ -299,7 +414,9 @@ def extract_intent(query: str) -> dict:
         "max_year_founded": max_year,
         "is_public": is_public,
         "business_models": business_models or None,
+        "industry": industry_label,
         "semantic_query": query,
         "criteria": criteria,
         "original_query": query,
+        "location_warning": location_warning,
     }

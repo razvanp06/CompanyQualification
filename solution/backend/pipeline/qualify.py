@@ -94,11 +94,16 @@ def qualify(query: str, top_n: int = FINAL_TOP_N) -> dict:
     after_f2 = len(reranked)
     print(f"[Filter 2] RAG pipeline complete — {after_f2} companies scored")
 
-    # ── Final ranking: 30% cosine similarity + 70% LLM score (0-10 → 0-1) ──
-    # Smooth 0-100 gradient: embedding prevents ties, LLM drives the ranking.
+    # ── Final ranking ─────────────────────────────────────────────────────────
+    # LLM score (0-10) maps directly to the 0-100 frontend scale:
+    #   LLM 7  → score 70  → green  ✓
+    #   LLM 6  → score 60  → orange ✗ (not shown)
+    # Embedding score is multiplied by 0.01 so it only breaks ties between
+    # companies that received the same integer LLM score, without ever pushing
+    # a company across the 70-point green threshold on its own.
     reranked["final_score"] = (
-        0.3 * reranked["embedding_score"] +
-        0.7 * (reranked["rag_score"] / 10.0)
+        reranked["rag_score"] / 10.0 +
+        reranked["embedding_score"] * 0.01
     )
     reranked = reranked.sort_values("final_score", ascending=False)
 

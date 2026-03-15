@@ -14,7 +14,7 @@ function adaptIntent(intent) {
   return {
     countries: intent.countries || [],
     regionMatch: null,
-    industries: [],
+    industries: intent.industry ? [{ key: intent.industry }] : [],
     employeeMin: intent.min_employees || null,
     employeeMax: intent.max_employees || null,
     revenueMin: intent.min_revenue || null,
@@ -145,10 +145,12 @@ function CompanyCard({ company, index }) {
         padding: "18px 20px",
         cursor: "pointer",
         transition: "all 0.2s",
-        borderLeft: company.qualified
+        borderLeft: company.score >= 70
           ? "3px solid #00e5a0"
+          : company.score >= 50
+          ? "3px solid #ffaa2c"
           : "3px solid #2a2e38",
-        opacity: company.qualified ? 1 : 0.55,
+        opacity: 1,
         animationDelay: `${index * 40}ms`,
       }}
       className="card-anim"
@@ -422,6 +424,259 @@ function ParsedPanel({ parsed }) {
   );
 }
 
+// ─── PRICING MODAL ───────────────────────────────────────────────────────────
+function PricingModal({ onClose, onSelect, loading }) {
+  const PLANS = [
+    { key: "starter",    label: "Starter",    price: "$49",  period: "/mo", desc: "100 qualification credits per month", highlight: false },
+    { key: "pro",        label: "Pro",        price: "$149", period: "/mo", desc: "500 credits + priority processing",    highlight: true  },
+    { key: "enterprise", label: "Enterprise", price: "$499", period: "/mo", desc: "Unlimited credits + API access",       highlight: false },
+  ];
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#12141a", border: "1px solid #2a2e38", borderRadius: 18, padding: "36px 32px", maxWidth: 640, width: "100%", position: "relative" }}>
+        <button onClick={onClose} style={{ position: "absolute", top: 16, right: 20, background: "none", border: "none", color: "#5a5f70", fontSize: "1.1rem", cursor: "pointer" }}>✕</button>
+        <h2 style={{ fontSize: "1.35rem", fontWeight: 700, marginBottom: 4 }}>Choose a plan</h2>
+        <p style={{ color: "#5a5f70", fontSize: "0.8rem", marginBottom: 28, fontFamily: '"DM Mono",monospace' }}>
+          Stripe test mode — use card <span style={{ color: "#00e5a0" }}>4242 4242 4242 4242</span>, any future date, any CVC
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+          {PLANS.map((p) => (
+            <div key={p.key} style={{ background: p.highlight ? "rgba(0,229,160,0.06)" : "#0a0b0f", border: `1px solid ${p.highlight ? "#00e5a0" : "#2a2e38"}`, borderRadius: 14, padding: "22px 16px", textAlign: "center" }}>
+              {p.highlight && (
+                <div style={{ fontSize: "0.6rem", fontFamily: '"DM Mono",monospace', color: "#00e5a0", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Most popular</div>
+              )}
+              <div style={{ fontSize: "0.72rem", fontFamily: '"DM Mono",monospace', color: "#5a5f70", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>{p.label}</div>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 2, marginBottom: 8 }}>
+                <span style={{ fontSize: "2.1rem", fontWeight: 700, color: p.highlight ? "#00e5a0" : "#e8eaf0" }}>{p.price}</span>
+                <span style={{ fontSize: "0.78rem", color: "#5a5f70", fontFamily: '"DM Mono",monospace' }}>{p.period}</span>
+              </div>
+              <p style={{ fontSize: "0.76rem", color: "#8b90a0", marginBottom: 20, lineHeight: 1.5 }}>{p.desc}</p>
+              <button onClick={() => onSelect(p.key)} disabled={loading}
+                style={{ width: "100%", background: p.highlight ? "linear-gradient(135deg,#00e5a0,#00b37d)" : "#1a1d26", color: p.highlight ? "#0a0b0f" : "#e8eaf0", border: p.highlight ? "none" : "1px solid #2a2e38", borderRadius: 9, padding: "11px 0", fontSize: "0.85rem", fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", fontFamily: '"Outfit",sans-serif', transition: "all 0.15s" }}>
+                {loading ? "Redirecting…" : "Get started"}
+              </button>
+            </div>
+          ))}
+        </div>
+        <p style={{ marginTop: 20, textAlign: "center", fontSize: "0.72rem", color: "#3a3f4d", fontFamily: '"DM Mono",monospace' }}>
+          Secured by Stripe · Cancel anytime · No hidden fees
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── PAYMENT SUCCESS BANNER ───────────────────────────────────────────────────
+function PaymentSuccessBanner({ plan, onDismiss }) {
+  const labels = { starter: "Starter", pro: "Pro", enterprise: "Enterprise" };
+  return (
+    <div style={{ background: "rgba(0,229,160,0.08)", border: "1px solid #00e5a0", borderRadius: 10, padding: "14px 20px", margin: "16px 0 0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <span style={{ fontSize: "0.88rem", color: "#00e5a0" }}>
+        Payment successful — <strong>{labels[plan] || "Plan"}</strong> activated. Your account is now upgraded.
+      </span>
+      <button onClick={onDismiss} style={{ background: "none", border: "none", color: "#5a5f70", cursor: "pointer", fontSize: "1rem", flexShrink: 0 }}>✕</button>
+    </div>
+  );
+}
+
+// ─── WIZARD SUB-COMPONENTS (must be at module level to preserve focus) ───────
+function WizardFieldLabel({ text, optional }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+      <span style={{ fontSize: "0.72rem", fontFamily: '"DM Mono",monospace', color: "#5a5f70", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        {text}
+      </span>
+      {optional && (
+        <span style={{ fontSize: "0.65rem", fontFamily: '"DM Mono",monospace', color: "#3a3f4d", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          optional
+        </span>
+      )}
+    </div>
+  );
+}
+
+function WizardChipBar({ chips, onChip }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
+      {chips.map((c) => (
+        <button key={c} className="chip-btn" onClick={() => onChip(c)}
+          style={{ background: "#0a0b0f", border: "1px solid #2a2e38", borderRadius: 100, padding: "3px 10px", fontSize: "0.68rem", color: "#5a5f70", cursor: "pointer", fontFamily: '"Outfit",sans-serif' }}>
+          {c}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function WizardTextInput({ val, setVal, placeholder }) {
+  return (
+    <input
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      placeholder={placeholder}
+      style={{ width: "100%", background: "#0a0b0f", border: "1px solid #2a2e38", borderRadius: 8, padding: "10px 14px", fontSize: "0.88rem", fontFamily: '"Outfit",sans-serif', color: "#e8eaf0", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s" }}
+    />
+  );
+}
+
+function WizardToggleGroup({ options, value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {options.map((o) => (
+        <button key={o.value} onClick={() => onChange(value === o.value ? "" : o.value)}
+          style={{ flex: 1, minWidth: 80, background: value === o.value ? "rgba(0,229,160,0.1)" : "#0a0b0f", border: `1px solid ${value === o.value ? "#00e5a0" : "#2a2e38"}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", textAlign: "center", transition: "all 0.15s" }}>
+          <div style={{ fontSize: "0.8rem", fontWeight: 600, color: value === o.value ? "#00e5a0" : "#8b90a0", fontFamily: '"Outfit",sans-serif' }}>{o.label}</div>
+          {o.sub && <div style={{ fontSize: "0.65rem", color: "#5a5f70", fontFamily: '"DM Mono",monospace', marginTop: 2 }}>{o.sub}</div>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── PROMPT WIZARD ──────────────────────────────────────────────────────────
+function PromptWizard({ onBuild, onClose }) {
+  const [industry, setIndustry] = useState("");
+  const [size, setSize] = useState("");
+  const [location, setLocation] = useState("");
+  const [financial, setFinancial] = useState("");
+  const [keywords, setKeywords] = useState("");
+
+  const SIZE_OPTIONS = [
+    { value: "startup", label: "Startup", sub: "1–10 emp." },
+    { value: "small", label: "SME", sub: "11–50 emp." },
+    { value: "medium", label: "Mid-market", sub: "51–500 emp." },
+    { value: "large", label: "Corporation", sub: "500+ emp." },
+  ];
+
+  const FINANCIAL_OPTIONS = [
+    { value: "revenue1m", label: "Turnover > €1M" },
+    { value: "profitable", label: "Profitable" },
+    { value: "early", label: "Early-stage" },
+  ];
+
+  const assemblePrompt = () => {
+    const base = industry ? `${industry} companies` : "companies";
+    const loc = location ? `in ${location}` : "";
+    const lead = [base, loc].filter(Boolean).join(" ");
+    const conditions = [];
+    if (size) {
+      const m = {
+        startup: "with 1 to 10 employees",
+        small: "with 11 to 50 employees",
+        medium: "with 51 to 500 employees",
+        large: "with more than 500 employees",
+      };
+      conditions.push(m[size]);
+    }
+    if (financial) {
+      const m = {
+        revenue1m: "with turnover over €1 million",
+        profitable: "that are profitable",
+        early: "that are early-stage startups",
+      };
+      conditions.push(m[financial]);
+    }
+    if (keywords) conditions.push(`focused on ${keywords}`);
+    return [lead, ...conditions].join(", ");
+  };
+
+  const preview = assemblePrompt();
+  const canBuild = !!(industry || location || size || financial || keywords);
+
+  return (
+    <div className="wizard-anim" style={{ background: "#12141a", border: "1px solid #2a2e38", borderRadius: 14, padding: "22px 24px", marginTop: 14 }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22 }}>
+        <div>
+          <p style={{ fontSize: "1rem", fontWeight: 600, color: "#e8eaf0" }}>Build your search</p>
+          <p style={{ fontSize: "0.78rem", color: "#5a5f70", marginTop: 3 }}>Answer what you know — all fields are optional</p>
+        </div>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "#5a5f70", cursor: "pointer", fontSize: "1rem", padding: "4px 8px", lineHeight: 1 }}>✕</button>
+      </div>
+
+      {/* Fields */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 28px" }}>
+        <div>
+          <WizardFieldLabel text="Field of Activity" />
+          <WizardTextInput val={industry} setVal={setIndustry} placeholder="e.g. IT, Healthcare, Agriculture…" />
+          <WizardChipBar chips={["IT", "Healthcare", "Agriculture", "E-commerce", "Construction", "Logistics"]} onChip={setIndustry} />
+        </div>
+
+        <div>
+          <WizardFieldLabel text="Location" />
+          <WizardTextInput val={location} setVal={setLocation} placeholder="e.g. Romania, Bucharest, Eastern Europe…" />
+          <WizardChipBar chips={["Romania", "Bucharest", "France", "Germany", "Eastern Europe", "USA"]} onChip={setLocation} />
+        </div>
+
+        <div>
+          <WizardFieldLabel text="Company Size" />
+          <WizardToggleGroup options={SIZE_OPTIONS} value={size} onChange={setSize} />
+        </div>
+
+        <div>
+          <WizardFieldLabel text="Financial Health" optional />
+          <WizardToggleGroup options={FINANCIAL_OPTIONS} value={financial} onChange={setFinancial} />
+        </div>
+
+        <div style={{ gridColumn: "1 / -1" }}>
+          <WizardFieldLabel text="Keywords / Technology" />
+          <WizardTextInput val={keywords} setVal={setKeywords} placeholder="e.g. artificial intelligence, B2B, green energy…" />
+          <WizardChipBar chips={["Artificial intelligence", "B2B", "SaaS", "Green energy", "Auto import-export", "Blockchain"]} onChip={setKeywords} />
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div style={{ marginTop: 22, padding: "14px 16px", background: "#0a0b0f", borderRadius: 10, border: "1px solid #2a2e38" }}>
+        <p style={{ fontSize: "0.65rem", fontFamily: '"DM Mono",monospace', color: "#5a5f70", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+          Generated prompt
+        </p>
+        <p style={{ fontSize: "0.88rem", color: canBuild ? "#e8eaf0" : "#3a3f4d", fontStyle: canBuild ? "normal" : "italic", lineHeight: 1.5 }}>
+          {canBuild ? preview : "Fill in at least one field above…"}
+        </p>
+      </div>
+
+      <button onClick={() => canBuild && onBuild(preview)} disabled={!canBuild}
+        style={{ marginTop: 14, width: "100%", background: canBuild ? "linear-gradient(135deg,#00e5a0,#00b37d)" : "#1a1d26", color: canBuild ? "#0a0b0f" : "#3a3f4d", border: "none", borderRadius: 10, padding: "13px 20px", fontSize: "0.95rem", fontWeight: 600, fontFamily: '"Outfit",sans-serif', cursor: canBuild ? "pointer" : "not-allowed", transition: "all 0.2s" }}>
+        Search with this prompt →
+      </button>
+    </div>
+  );
+}
+
+// ─── ADAPTIVE DISPLAY ────────────────────────────────────────────────────────
+// Instead of a fixed score threshold, detect the natural "gap" in the score
+// distribution and show only the companies clearly above it.
+//
+// Algorithm:
+//   1. Take the top 20 scored companies.
+//   2. Find the largest score drop between consecutive companies.
+//   3. If that gap is ≥ 15 points, cut there → show only companies above the gap.
+//   4. If no significant gap exists (scores are tightly clustered), show top 5.
+//   5. Always show at least 1 and at most 10 results.
+//
+// Examples:
+//   [88, 82, 79, 74, 31, 22] → gap 43 between 74 and 31 → show first 4
+//   [82, 78, 75, 72, 68, 64] → no gap ≥15 → show top 5
+//   [90, 20, 15]             → gap 70 between 90 and 20 → show first 1
+function computeDisplayed(allScored) {
+  if (allScored.length === 0) return [];
+  const top = allScored.slice(0, 20);
+  if (top.length <= 2) return top;
+
+  let maxGap = 0;
+  let cutIdx = top.length;
+  for (let i = 0; i < top.length - 1; i++) {
+    const gap = top[i].score - top[i + 1].score;
+    if (gap > maxGap) {
+      maxGap = gap;
+      cutIdx = i + 1;
+    }
+  }
+
+  if (maxGap >= 15) return top.slice(0, Math.min(cutIdx, 10));
+  return top.slice(0, Math.min(5, top.length));
+}
+
 // ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const [query, setQuery] = useState("");
@@ -431,6 +686,32 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [totalCompanies, setTotalCompanies] = useState(477);
   const inputRef = useRef(null);
+  const [showWizard, setShowWizard] = useState(false);
+
+  // ── Stripe / payment state ─────────────────────────────────────────────────
+  const [showPricing, setShowPricing] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const _urlParams = new URLSearchParams(window.location.search);
+  const [paymentSuccess, setPaymentSuccess] = useState(_urlParams.get("payment") === "success");
+  const paidPlan = _urlParams.get("plan") || "";
+
+  const handleCheckout = async (plan) => {
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/create-checkout-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, frontend_url: window.location.origin }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else alert(data.detail || "Checkout failed");
+    } catch (err) {
+      console.error("Checkout error:", err);
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
 
   const run = useCallback(async (q) => {
     setLoading(true);
@@ -446,7 +727,8 @@ export default function App() {
       const scored = (data.results || []).map(adaptCompany);
       const parsed = adaptIntent(data.intent || {});
       setTotalCompanies(data.total_candidates || 477);
-      setResults({ query: q, parsed, scored, time: elapsed });
+      const locationWarning = data.intent?.location_warning || null;
+      setResults({ query: q, parsed, scored, time: elapsed, locationWarning });
       setTab("qualified");
       setTime(elapsed);
     } catch (err) {
@@ -456,16 +738,19 @@ export default function App() {
     }
   }, []);
 
+  const handleWizardBuild = (prompt) => {
+    setQuery(prompt);
+    setShowWizard(false);
+    run(prompt);
+  };
+
   const handleSubmit = (e) => {
     e?.preventDefault();
     if (query.trim() && !loading) run(query.trim());
   };
 
   const allScored = results?.scored ? [...results.scored].sort((a, b) => b.score - a.score) : [];
-  // Show only green results (≥70%). If none qualify, show the top 3 so the page is never empty.
-  const GREEN_THRESHOLD = 70;
-  const qualified = allScored.filter((r) => r.score >= GREEN_THRESHOLD);
-  const displayed = qualified.length > 0 ? qualified : allScored.slice(0, 3);
+  const displayed = computeDisplayed(allScored);
 
   return (
     <>
@@ -490,6 +775,10 @@ export default function App() {
         .preset-btn:hover { background:#1a1d26 !important; border-color:#00b37d !important; color:#00e5a0 !important; }
         .tab-btn { transition: all 0.15s; cursor:pointer; }
         .tab-btn:hover { color:#8b90a0 !important; }
+        @keyframes wizardIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        .wizard-anim { animation: wizardIn 0.25s ease-out both; }
+        .chip-btn:hover { border-color:#00b37d !important; color:#00e5a0 !important; }
+        .wizard-trigger-btn:hover { border-color:#00b37d !important; color:#00e5a0 !important; }
       `}</style>
 
       <div className="bg-grid" />
@@ -545,23 +834,26 @@ export default function App() {
               </span>
             </h1>
           </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 18,
-              fontFamily: '"DM Mono",monospace',
-              fontSize: "0.75rem",
-              color: "#5a5f70",
-            }}
-          >
-            <span>
-              <span style={{ color: "#e8eaf0", fontWeight: 500 }}>
-                {totalCompanies}
-              </span>{" "}
-              companies
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <span style={{ fontFamily: '"DM Mono",monospace', fontSize: "0.75rem", color: "#5a5f70" }}>
+              <span style={{ color: "#e8eaf0", fontWeight: 500 }}>{totalCompanies}</span> companies
             </span>
+            <button
+              onClick={() => setShowPricing(true)}
+              style={{ background: "linear-gradient(135deg,#00e5a0,#00b37d)", color: "#0a0b0f", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", fontFamily: '"Outfit",sans-serif', letterSpacing: "-0.01em" }}
+            >
+              Upgrade
+            </button>
           </div>
         </header>
+
+        {paymentSuccess && (
+          <PaymentSuccessBanner plan={paidPlan} onDismiss={() => setPaymentSuccess(false)} />
+        )}
+
+        {showPricing && (
+          <PricingModal onClose={() => setShowPricing(false)} onSelect={handleCheckout} loading={checkoutLoading} />
+        )}
 
         {/* ─── SEARCH ──── */}
         <section style={{ padding: "28px 0" }}>
@@ -635,6 +927,35 @@ export default function App() {
               </button>
             ))}
           </div>
+
+          {/* ─── WIZARD TRIGGER ──── */}
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+            <button
+              className="wizard-trigger-btn"
+              onClick={() => setShowWizard((v) => !v)}
+              style={{
+                background: "none",
+                border: "1px solid #2a2e38",
+                borderRadius: 100,
+                padding: "7px 18px",
+                fontSize: "0.78rem",
+                color: showWizard ? "#00e5a0" : "#5a5f70",
+                cursor: "pointer",
+                fontFamily: '"Outfit",sans-serif',
+                transition: "all 0.2s",
+                borderColor: showWizard ? "#00e5a0" : "#2a2e38",
+              }}
+            >
+              {showWizard ? "✕ Close guide" : "I don't know how to write a prompt"}
+            </button>
+          </div>
+
+          {showWizard && (
+            <PromptWizard
+              onBuild={handleWizardBuild}
+              onClose={() => setShowWizard(false)}
+            />
+          )}
         </section>
 
         {/* ─── RESULTS ──── */}
@@ -685,7 +1006,7 @@ export default function App() {
                     fontWeight: 500,
                   }}
                 >
-                  ✓ {qualified.length} qualified
+                  ✓ {displayed.length} results
                 </span>
                 <span
                   style={{
@@ -703,6 +1024,16 @@ export default function App() {
                 </span>
               </div>
             </div>
+
+            {results.locationWarning && (
+              <div style={{ background: "rgba(255,170,44,0.08)", border: "1px solid #ffaa2c", borderRadius: 10, padding: "14px 18px", marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <span style={{ color: "#ffaa2c", fontSize: "1rem", flexShrink: 0 }}>⚠</span>
+                <div>
+                  <p style={{ fontSize: "0.85rem", color: "#ffaa2c", fontWeight: 600, marginBottom: 3 }}>Location not found</p>
+                  <p style={{ fontSize: "0.82rem", color: "#8b90a0", lineHeight: 1.6 }}>{results.locationWarning}</p>
+                </div>
+              </div>
+            )}
 
             <ParsedPanel parsed={results.parsed} />
 
@@ -723,17 +1054,14 @@ export default function App() {
                   color: "#5a5f70",
                 }}
               >
-                <p
-                  style={{
-                    fontSize: "1.1rem",
-                    color: "#8b90a0",
-                    marginBottom: 4,
-                  }}
-                >
-                  No companies qualified
+                <div style={{ fontSize: "2rem", marginBottom: 14, opacity: 0.2 }}>○</div>
+                <p style={{ fontSize: "1.05rem", color: "#8b90a0", marginBottom: 6 }}>
+                  No companies matched your criteria
                 </p>
-                <p style={{ fontSize: "0.85rem" }}>
-                  Try a different query or adjust your criteria
+                <p style={{ fontSize: "0.83rem", maxWidth: 400, margin: "0 auto", lineHeight: 1.6 }}>
+                  {allScored.length > 0
+                    ? `${allScored.length} companies were evaluated but scores were too low to show. Try broadening your criteria — widen the location, remove the employee filter, or simplify the query.`
+                    : "No companies found in the database for this combination of filters."}
                 </p>
               </div>
             )}

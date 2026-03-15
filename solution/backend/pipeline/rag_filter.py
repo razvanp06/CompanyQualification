@@ -114,16 +114,18 @@ def _score_batch(
     criteria_text = "; ".join(criteria)
 
     prompt = (
-        f"You are a strict company qualifier. Rate each company 0-10 based on how well "
-        f"its PRIMARY business matches the query. Rules:\n"
-        f"- 8-10: core business directly matches\n"
-        f"- 4-7: partial or indirect match\n"
-        f"- 0-3: unrelated, or only a side activity\n\n"
+        f"Rate each company 0-10 for how well it fits the query. Reply ONLY with id:score lines.\n\n"
+        f"RULE: Score what industry the company IS IN, not who its customers are.\n"
+        f"Examples:\n"
+        f"  Query='IT companies' | HR software company → 9 (software IS the IT industry)\n"
+        f"  Query='IT companies' | logistics company → 0 (logistics is not IT)\n"
+        f"  Query='logistics'    | IT company serving logistics clients → 0 (IT ≠ logistics)\n"
+        f"  Query='logistics'    | freight/trucking company → 9\n\n"
+        f"Scale: 10=perfect match, 7-9=strong match, 4-6=partial, 0-3=unrelated\n\n"
         f"Query: \"{query}\"\n"
         f"Criteria: {criteria_text}\n\n"
         f"{companies_text}\n\n"
-        f"Reply with ONLY this format, one per line: id:score\n"
-        f"Example:\n1:8\n2:0\n3:9\n..."
+        f"Reply format (one per line, nothing else):\n1:score\n2:score\n..."
     )
 
     try:
@@ -131,7 +133,7 @@ def _score_batch(
             model=LLM_RERANK_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
-            max_tokens=len(companies) * 6 + 10,
+            max_tokens=len(companies) * 10 + 40,
         )
         raw = resp.choices[0].message.content.strip()
         # Parse "id:score" lines — robust to extra whitespace or markdown

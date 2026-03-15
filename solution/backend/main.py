@@ -6,6 +6,12 @@ import os
 import math
 import json
 import psutil
+try:
+    import stripe
+    _stripe_available = True
+except ImportError:
+    stripe = None
+    _stripe_available = False
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,6 +20,9 @@ import uvicorn
 import traceback
 import time
 sys.path.insert(0, os.path.dirname(__file__))
+
+if _stripe_available:
+    stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 
 from pipeline.qualify import qualify, _load_data
 from pipeline.rag_filter import build_global_index
@@ -30,6 +39,50 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
     top_n: int = 20
+
+class CheckoutRequest(BaseModel):
+    plan: str  # "starter" | "pro" | "enterprise"
+    frontend_url: str = ""
+
+_PLANS = {
+    "starter":    {"name": "Starter",    "price_cents": 4900,  "desc": "100 qualification credits / month"},
+    "pro":        {"name": "Pro",        "price_cents": 14900, "desc": "500 credits + priority processing"},
+    "enterprise": {"name": "Enterprise", "price_cents": 49900, "desc": "Unlimited credits + API access"},
+}
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+@app.post("/create-checkout-session")
+def create_checkout_session(req: CheckoutRequest):
+    if not _stripe_available:
+        raise HTTPException(status_code=503, detail="Stripe not installed. Run: pip install stripe")
+    plan = _PLANS.get(req.plan)
+    if not plan:
+        raise HTTPException(status_code=400, detail="Unknown plan")
+    if not stripe.api_key:
+        raise HTTPException(status_code=503, detail="Stripe not configured — set STRIPE_SECRET_KEY env var")
+    base_url = req.frontend_url.rstrip("/") if req.frontend_url else FRONTEND_URL
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": f"Intent Qualifier — {plan['name']} Plan",
+                        "description": plan["desc"],
+                    },
+                    "unit_amount": plan["price_cents"],
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url=f"{base_url}/?payment=success&plan={req.plan}",
+            cancel_url=f"{base_url}/?payment=cancelled",
+        )
+        return {"url": session.url, "session_id": session.id}
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/diagnostics")
 def diagnostics():

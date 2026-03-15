@@ -45,6 +45,12 @@ def _get_country_code(addr) -> str | None:
     return parsed.get("country_code", None)
 
 
+def _get_town(addr) -> str | None:
+    parsed = _parse_address(addr)
+    town = parsed.get("town")
+    return town.lower() if town else None
+
+
 def apply_structured_filter(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     """
     Apply all hard-constraint filters from the intent dict.
@@ -52,10 +58,15 @@ def apply_structured_filter(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     """
     mask = pd.Series([True] * len(df), index=df.index)
 
-    # --- Country filter ---
-    countries = intent.get("countries")
-    if countries:
-        codes = {c.lower() for c in countries}
+    # --- Town (city) filter — takes priority over country filter ---
+    towns = intent.get("towns")
+    if towns:
+        town_set = {t.lower() for t in towns}
+        town_series = df["address"].apply(_get_town)
+        mask &= town_series.isin(town_set)
+    # --- Country filter (only applied when no city is specified) ---
+    elif intent.get("countries"):
+        codes = {c.lower() for c in intent["countries"]}
         country_series = df["address"].apply(_get_country_code).str.lower()
         mask &= country_series.isin(codes)
 
@@ -88,6 +99,86 @@ def apply_structured_filter(df: pd.DataFrame, intent: dict) -> pd.DataFrame:
     is_public = intent.get("is_public")
     if is_public is not None:
         mask &= df["is_public"] == is_public
+
+    # --- Industry NAICS exclusion filter ---
+    # When an industry is detected in the query, exclude companies whose NAICS
+    # label clearly belongs to a different sector. Uses a negative filter
+    # (exclude known mismatches) rather than a positive allowlist, so companies
+    # with missing or unusual NAICS codes are never accidentally removed.
+    _INDUSTRY_NAICS_EXCLUDE = {
+        "IT / Software": [
+            "petroleum", "refin", "gasoline", "crude oil", "natural gas", "oil well",
+            "coal", "mining", "agricultural", "crop", "farm", "livestock", "poultry",
+            "food manufactur", "beverage", "meat", "dairy", "bakeries",
+            "automobile manufactur", "motor vehicle manufactur",
+            "construction of build", "heavy and civil",
+            "real estate", "railroad", "postal service",
+        ],
+        "Logistics": [
+            "software publish", "pharmaceutical manufactur", "drug manufactur",
+            "petroleum refin", "coal mining", "crop production",
+        ],
+        "Pharmaceutical": [
+            "petroleum", "software publish", "food manufactur", "automobile",
+            "real estate", "financial", "insurance",
+        ],
+        "Energy": [
+            "software publish", "pharmaceutical", "food manufactur",
+            "retail", "insurance", "real estate",
+        ],
+        "Food & Beverage": [
+            "software publish", "petroleum refin", "mining", "financial",
+            "insurance", "real estate",
+        ],
+        "Finance / Fintech": [
+            "petroleum", "food manufactur", "mining", "agricultural",
+            "automobile manufactur", "construction of build",
+        ],
+        "Retail / E-commerce": [
+            "petroleum refin", "mining", "agricultural", "pharmaceutical manufactur",
+        ],
+    }
+
+    detected_industry = intent.get("industry")
+    excluded_naics_kws = _INDUSTRY_NAICS_EXCLUDE.get(detected_industry, [])
+    if excluded_naics_kws:
+        def _naics_ok(naics_val) -> bool:
+            if not naics_val or not isinstance(naics_val, dict):
+                return True  # no NAICS data → keep (don't penalise missing data)
+            label = naics_val.get("label", "").lower()
+            if not label:
+                return True
+            return not any(kw in label for kw in excluded_naics_kws)
+        mask &= df["primary_naics"].apply(_naics_ok)
+
+    # --- Business model filter ---
+    # Maps intent business model keys → substrings to match in the company's business_model list.
+    # Uses OR logic: keep the company if ANY of its business_model entries matches ANY keyword.
+    # Also keeps companies with no business_model data (null / empty list).
+    _BM_KEYWORDS = {
+        "ecommerce":    ["e-commerce", "ecommerce", "retail", "direct-to-consumer"],
+        "b2b":          ["business-to-business", "b2b", "enterprise"],
+        "b2c":          ["business-to-consumer", "b2c", "retail"],
+        "saas":         ["software-as-a-service", "saas", "cloud"],
+        "marketplace":  ["marketplace", "platform"],
+        "subscription": ["subscription"],
+    }
+    business_models = intent.get("business_models") or []
+    if business_models:
+        wanted = set()
+        for bm_key in business_models:
+            wanted.update(_BM_KEYWORDS.get(bm_key, [bm_key]))
+
+        def _has_bm(val) -> bool:
+            if not val:
+                return True  # no data → don't exclude
+            items = val if isinstance(val, list) else [val]
+            return any(
+                any(kw in str(item).lower() for kw in wanted)
+                for item in items
+            )
+
+        mask &= df["business_model"].apply(_has_bm)
 
     filtered = df[mask].copy()
     return filtered
