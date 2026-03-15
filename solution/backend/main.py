@@ -94,10 +94,13 @@ def diagnostics():
 
 @app.on_event("startup")
 async def startup():
-    """Pre-load data and FAISS."""
-    df = _load_data()
-    build_global_index(df)
-    print("🚀 Startup complet - 5x optimizat!")
+    """Pre-load data and FAISS in background so port binds immediately."""
+    import threading
+    def _load():
+        df = _load_data()
+        build_global_index(df)
+        print("🚀 Startup complet - index ready!")
+    threading.Thread(target=_load, daemon=True).start()
 
 @app.get("/health")
 def health():
